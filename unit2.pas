@@ -12,13 +12,11 @@ type
   { TForm2 }
 
   TForm2 = class(TForm)
-    Button1: TButton;
     EditURL: TEdit;
-    EditHeaders: TEdit;
+    EditToken: TEdit;
     Label1: TLabel;
     Label2: TLabel;
     ButtonSave: TButton;
-    ButtonCancel: TButton;
     procedure ButtonSaveClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -32,7 +30,6 @@ type
 var
   Form2: TForm2;
   IniFileName: string;
-  a: string;
 
 implementation
 
@@ -42,7 +39,6 @@ implementation
 
 procedure TForm2.FormCreate(Sender: TObject);
 begin
-  // LoadConfig will be called in FormShow to ensure UI elements are ready
 end;
 
 procedure TForm2.FormShow(Sender: TObject);
@@ -59,7 +55,7 @@ begin
 
   try
     EditURL.Text := Ini.ReadString('AIConfig', 'URL', '');
-    EditHeaders.Text := Ini.ReadString('AIConfig', 'Headers', '');
+    EditToken.Text := Ini.ReadString('AIConfig', 'Token', '');
   finally
     Ini.Free;
   end;
@@ -74,7 +70,7 @@ begin
 
   try
     Ini.WriteString('AIConfig', 'URL', EditURL.Text);
-    Ini.WriteString('AIConfig', 'Headers', EditHeaders.Text);
+    Ini.WriteString('AIConfig', 'Token', EditToken.Text);
   finally
     Ini.Free;
   end;
@@ -83,6 +79,6 @@ end;
 procedure TForm2.ButtonSaveClick(Sender: TObject);
 begin
   SaveConfig;
-  ModalResult := mrOk; // Close the dialog with OK result
+  ModalResult := mrOk;
 end;
 end.
