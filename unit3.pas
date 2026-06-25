@@ -5,14 +5,11 @@ unit Unit3;
 interface
 
 uses
-  Classes, SysUtils, fphttpclient, fpjson, jsonparser;
+  Classes, SysUtils, fphttpclient, fpjson, jsonparser, opensslsockets, LazLogger;
 
 type
 
   { TGeminiSSEThread }
-
-  TGeminiSSEThread = class;
-
   TOnSSEStartEvent = procedure(Sender: TObject) of object;
   TOnSSEDataEvent = procedure(Sender: TObject; const AText: string; IsDone: Boolean) of object;
   TOnSSEErrorEvent = procedure(Sender: TObject; const AError: string) of object;
@@ -96,15 +93,12 @@ procedure TGeminiSSEThread.ProcessSSELine(const ALine: string);
 var
   JSONData: TJSONData;
   JSONObj: TJSONObject;
-  CandidatesArray: TJSONArray;
-  CandidateObj: TJSONObject;
-  ContentObj: TJSONObject;
-  PartsArray: TJSONArray;
-  PartObj: TJSONObject;
-  I, J: Integer;
+  EventType: string;
+  DeltaObj: TJSONObject;
   Text: string;
   Done: Boolean;
 begin
+  DebugLn('line: ' + ALine);
   if Trim(ALine) = '' then Exit;
   if Copy(ALine, 1, 6) = 'data: ' then
   begin
@@ -131,31 +125,25 @@ begin
         if JSONData is TJSONObject then
         begin
           JSONObj := TJSONObject(JSONData);
-          if JSONObj.Find('candidates') is TJSONArray then
+          EventType := JSONObj.Get('event_type', '');
+
+          if EventType = 'step.delta' then
           begin
-            CandidatesArray := JSONObj.Arrays['candidates'];
-            for I := 0 to CandidatesArray.Count - 1 do
+            if JSONObj.Find('delta') is TJSONObject then
             begin
-              CandidateObj := CandidatesArray.Objects[I];
-              if CandidateObj.Find('content') is TJSONObject then
+              DeltaObj := TJSONObject(JSONObj.Find('delta'));
+              if DeltaObj.Get('type', '') = 'text' then
               begin
-                ContentObj := CandidateObj.Objects['content'];
-                if ContentObj.Find('parts') is TJSONArray then
-                begin
-                  PartsArray := ContentObj.Arrays['parts'];
-                  for J := 0 to PartsArray.Count - 1 do
-                  begin
-                    PartObj := PartsArray.Objects[J];
-                    if PartObj.Find('text') <> nil then
-                      Text := Text + PartObj.Get('text', '');
-                  end;
-                end;
+                Text := DeltaObj.Get('text', '');
               end;
-              if CandidateObj.Find('finishReason') <> nil then
-                Done := True;
             end;
+          end
+          else if EventType = 'interaction.completed' then
+          begin
+            Done := True;
           end;
-          if Text <> '' then
+
+          if (Text <> '') or Done then // Only call DoData if there's text or if it's done
             DoData(Text, Done);
         end;
       finally
@@ -176,9 +164,6 @@ var
   HttpClient: TFPHTTPClient;
   RequestBody: TJSONObject;
   RequestJSON: string;
-  ContentObj: TJSONObject;
-  PartsArray: TJSONArray;
-  PartObj: TJSONObject;
   FullURL: string;
   ResponseStream: TMemoryStream;
   Buffer: array[0..4095] of Byte;
@@ -192,32 +177,19 @@ begin
   try
     RequestBody := TJSONObject.Create;
     try
-      ContentObj := TJSONObject.Create;
-      PartsArray := TJSONArray.Create;
-      PartObj := TJSONObject.Create;
-      PartObj.Add('text', FPrompt);
-      PartsArray.Add(PartObj);
-      ContentObj.Add('role', 'user');
-      ContentObj.Add('parts', PartsArray);
-      RequestBody.Add('contents', TJSONArray.Create([ContentObj]));
+      RequestBody.Add('model', 'gemini-3.5-flash');
+      RequestBody.Add('input', FPrompt);
+      RequestBody.Add('stream', True);
       RequestJSON := RequestBody.AsJSON;
     finally
       RequestBody.Free;
     end;
 
     FullURL := FURL;
-    if Pos('?key=', FullURL) = 0 then
-      FullURL := FullURL + '?key=' + FToken;
-    if Pos('alt=sse', FullURL) = 0 then
-    begin
-      if Pos('?', FullURL) > 0 then
-        FullURL := FullURL + '&alt=sse'
-      else
-        FullURL := FullURL + '?alt=sse';
-    end;
 
     HttpClient.RequestHeaders.Clear;
     HttpClient.RequestHeaders.Add('Content-Type: application/json');
+    HttpClient.RequestHeaders.Add('X-goog-api-key: ' + FToken);
     HttpClient.RequestHeaders.Add('Accept: text/event-stream');
 
     Synchronize(@DoStart);
@@ -296,11 +268,8 @@ begin
 end;
 
 function TGeminiAPI.IsBusy: Boolean;
-var a: Boolean;
 begin
-  a := Assigned(FThread);
-  //a := FThread <> nil;
-  Result := a;
+  Result := Assigned(FThread);
 end;
 
 end.
