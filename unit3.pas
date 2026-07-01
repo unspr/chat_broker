@@ -5,7 +5,7 @@ unit Unit3;
 interface
 
 uses
-  Classes, SysUtils, fphttpclient, fpjson, jsonparser, opensslsockets, LazLogger;
+  Classes, SysUtils, fpjson, jsonparser, LazLogger, SSEClientUnit;
 
 type
 
@@ -19,19 +19,26 @@ type
     FURL: string;
     FToken: string;
     FPrompt: string;
-    FBuffer: string;
+    FSSEClient: TSSEClient;
     FOnStart: TOnSSEStartEvent;
     FOnData: TOnSSEDataEvent;
     FOnError: TOnSSEErrorEvent;
     AErrorMsg: string;
+    FSyncedText: string; // New: for Synchronize parameter passing
+    FSyncedDone: Boolean; // New: for Synchronize parameter passing
     procedure DoStart;
     procedure DoData(const AText: string; IsDone: Boolean);
     procedure DoError;
-    procedure ProcessSSELine(const ALine: string);
+    procedure DoDataSync; // New: Parameterless method for Synchronize
+    procedure SSEClientEvent(Sender: TObject; const AEvent: TSSEEvent);
+    procedure SSEClientOpen(Sender: TObject);
+    procedure SSEClientError(Sender: TObject; const AError: string);
+    procedure SSEClientClose(Sender: TObject); // New: Named method for OnClose
   protected
     procedure Execute; override;
   public
     constructor Create(const AURL, AToken, APrompt: string);
+    destructor Destroy; override; // Added destructor
     property OnStart: TOnSSEStartEvent read FOnStart write FOnStart;
     property OnData: TOnSSEDataEvent read FOnData write FOnData;
     property OnError: TOnSSEErrorEvent read FOnError write FOnError;
@@ -69,6 +76,18 @@ begin
   FToken := AToken;
   FPrompt := APrompt;
   FreeOnTerminate := True;
+
+  FSSEClient := TSSEClient.Create;
+  FSSEClient.OnOpen := @SSEClientOpen;   // Fixed: Added @
+  FSSEClient.OnEvent := @SSEClientEvent; // Fixed: Added @
+  FSSEClient.OnError := @SSEClientError; // Fixed: Added @
+  FSSEClient.OnClose := @SSEClientClose; // Fixed: Assign named method with @
+end;
+
+destructor TGeminiSSEThread.Destroy;
+begin
+  FSSEClient.Free;
+  inherited Destroy;
 end;
 
 procedure TGeminiSSEThread.DoStart;
@@ -89,7 +108,28 @@ begin
     FOnError(Self, AErrorMsg);
 end;
 
-procedure TGeminiSSEThread.ProcessSSELine(const ALine: string);
+procedure TGeminiSSEThread.DoDataSync;
+begin
+  DoData(FSyncedText, FSyncedDone);
+end;
+
+procedure TGeminiSSEThread.SSEClientOpen(Sender: TObject);
+begin
+  Synchronize(@DoStart);
+end;
+
+procedure TGeminiSSEThread.SSEClientError(Sender: TObject; const AError: string);
+begin
+  AErrorMsg := AError;
+  Synchronize(@DoError);
+end;
+
+procedure TGeminiSSEThread.SSEClientClose(Sender: TObject); // Implementation for the new named method
+begin
+  Terminate;
+end;
+
+procedure TGeminiSSEThread.SSEClientEvent(Sender: TObject; const AEvent: TSSEEvent);
 var
   JSONData: TJSONData;
   JSONObj: TJSONObject;
@@ -98,27 +138,18 @@ var
   Text: string;
   Done: Boolean;
 begin
-  DebugLn('line: ' + ALine);
-  if Trim(ALine) = '' then Exit;
-  if Copy(ALine, 1, 6) = 'data: ' then
-  begin
-    FBuffer := FBuffer + Copy(ALine, 7);
-  end
-  else
-  begin
-    FBuffer := FBuffer + ALine;
-  end;
+  DebugLn('SSEClientEvent - Type: ' + AEvent.EventType + ', Data: ' + AEvent.Data);
+  if AEvent.Data = '' then Exit;
 
   try
-    if Trim(FBuffer) = '[DONE]' then
+    if Trim(AEvent.Data) = '[DONE]' then
     begin
       DoData('', True);
-      FBuffer := '';
       Exit;
     end;
 
     try
-      JSONData := GetJSON(FBuffer);
+      JSONData := GetJSON(AEvent.Data);
       try
         Done := False;
         Text := '';
@@ -143,8 +174,12 @@ begin
             Done := True;
           end;
 
-          if (Text <> '') or Done then // Only call DoData if there's text or if it's done
-            DoData(Text, Done);
+          if (Text <> '') or Done then
+          begin
+            FSyncedText := Text;
+            FSyncedDone := Done;
+            Synchronize(@DoDataSync);
+          end;
         end;
       finally
         JSONData.Free;
@@ -152,28 +187,21 @@ begin
     except
       on E: Exception do
       begin
+        DebugLn('JSON parsing error in SSEClientEvent: ' + E.Message);
       end;
     end;
   finally
-    FBuffer := '';
+    // FBuffer := ''; // FBuffer is no longer used here
   end;
 end;
 
 procedure TGeminiSSEThread.Execute;
 var
-  HttpClient: TFPHTTPClient;
   RequestBody: TJSONObject;
   RequestJSON: string;
-  FullURL: string;
-  ResponseStream: TMemoryStream;
-  Buffer: array[0..4095] of Byte;
-  BytesRead: Integer;
-  LineBuffer: string;
-  I: Integer;
-  Ch: Char;
+  Headers: TStringList;
 begin
-  HttpClient := TFPHTTPClient.Create(nil);
-  ResponseStream := TMemoryStream.Create;
+  Headers := TStringList.Create;
   try
     RequestBody := TJSONObject.Create;
     try
@@ -185,47 +213,19 @@ begin
       RequestBody.Free;
     end;
 
-    FullURL := FURL;
+    Headers.Add('Content-Type: application/json');
+    Headers.Add('X-goog-api-key: ' + FToken);
 
-    HttpClient.RequestHeaders.Clear;
-    HttpClient.RequestHeaders.Add('Content-Type: application/json');
-    HttpClient.RequestHeaders.Add('X-goog-api-key: ' + FToken);
-    HttpClient.RequestHeaders.Add('Accept: text/event-stream');
+    FSSEClient.Connect(FURL, Headers, RequestJSON);
 
-    Synchronize(@DoStart);
-
-    try
-      HttpClient.FormPost(FullURL, RequestJSON, ResponseStream);
-      ResponseStream.Position := 0;
-
-      LineBuffer := '';
-      while ResponseStream.Position < ResponseStream.Size do
-      begin
-        BytesRead := ResponseStream.Read(Buffer, SizeOf(Buffer));
-        for I := 0 to BytesRead - 1 do
-        begin
-          Ch := Char(Buffer[I]);
-          if Ch = #10 then
-          begin
-            ProcessSSELine(LineBuffer);
-            LineBuffer := '';
-          end
-          else if Ch <> #13 then
-            LineBuffer := LineBuffer + Ch;
-        end;
-      end;
-      if LineBuffer <> '' then
-        ProcessSSELine(LineBuffer);
-    except
-      on E: Exception do
-      begin
-        AErrorMsg := E.Message;
-        Synchronize(@DoError);
-      end;
+    // Wait for the SSEClient to finish or for the thread to be terminated externally
+    while not Terminated and FSSEClient.IsActive do
+    begin
+      Sleep(100);
     end;
+    FSSEClient.Disconnect;
   finally
-    ResponseStream.Free;
-    HttpClient.Free;
+    Headers.Free;
   end;
 end;
 
@@ -242,10 +242,12 @@ end;
 destructor TGeminiAPI.Destroy;
 begin
   if Assigned(FThread) then
-  begin
-    FThread.Terminate;
-    FThread.WaitFor;
-  end;
+    begin
+      FThread.Terminate;
+      FThread.WaitFor;
+      FThread.Free;
+      FThread := nil;
+    end;
   inherited Destroy;
 end;
 
@@ -257,8 +259,12 @@ end;
 procedure TGeminiAPI.SendPrompt(const APrompt: string);
 begin
   if Assigned(FThread) then
-    raise Exception.Create('API is busy');
-
+  begin
+    //if FThread.Running then // This will be changed to not FThread.Terminated
+    //  Exit; // Still busy with previous request
+    FThread.Free; // Free previous thread if not running
+    FThread := nil;
+  end;
   FThread := TGeminiSSEThread.Create(FURL, FToken, APrompt);
   FThread.OnStart := FOnStart;
   FThread.OnData := FOnData;
@@ -269,7 +275,7 @@ end;
 
 function TGeminiAPI.IsBusy: Boolean;
 begin
-  Result := Assigned(FThread);
+  Result := Assigned(FThread) and not FThread.Terminated; // Fixed: Changed from FThread.Running
 end;
 
 end.
