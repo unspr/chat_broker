@@ -10,14 +10,11 @@ object Form1: TForm1
   LCLVersion = '4.6.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  object Memo1: TMemo
+  object HtmlViewer1: THtmlViewer
     Left = 48
     Height = 464
     Top = 32
     Width = 632
-    Lines.Strings = (
-      ''
-    )
     ScrollBars = ssVertical
     TabOrder = 2
   end

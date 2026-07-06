@@ -5,3 +5,4 @@ lib
 *.dll
 *.lps
 bin
+.idea

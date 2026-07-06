@@ -6,14 +6,14 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, Unit2,
-  Unit3, IniFiles;
+  Unit3, IniFiles, HtmlView;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
-    Memo1: TMemo;
+    HtmlViewer1: THtmlViewer;
     Edit1: TEdit;
     Button1: TButton;
     Button2: TButton;
@@ -23,8 +23,9 @@ type
     procedure FormDestroy(Sender: TObject);
   private
     FGeminiAPI: TGeminiAPI;
-    FAIResponseLine: Integer;
-    procedure AppendToMemo(const AText: string);
+    FAIResponseHTML: TStringList;
+    FIsReceivingAI: Boolean;
+    procedure AppendToHTML(const AText: string);
     function LoadConfig: TStringList;
     procedure OnSSEStart(Sender: TObject);
     procedure OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
@@ -43,12 +44,44 @@ implementation
 
 { TForm1 }
 
-procedure TForm1.AppendToMemo(const AText: string);
+function EscapeHTML(const AText: string): string;
 begin
-  Memo1.Lines.Add(AText);
-  Memo1.Lines.Add('');
-  Memo1.SelStart := Length(Memo1.Text);
-  Memo1.Perform(EM_SCROLLCARET, 0, 0);
+  Result := StringReplace(AText, '&', '&amp;', [rfReplaceAll]);
+  Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
+  Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
+  Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
+  Result := StringReplace(Result, '''', '&#39;', [rfReplaceAll]);
+end;
+
+procedure TForm1.AppendToHTML(const AText: string);
+var
+  UserMessage, AIMessage: string;
+begin
+  // 将文本转换为简单的 HTML 格式
+  UserMessage := '<div style="margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px;">' + 
+                 '<strong>me:</strong> ' + EscapeHTML(AText) + '</div>';
+  
+  if not FIsReceivingAI then
+  begin
+    FAIResponseHTML.Clear;
+    FAIResponseHTML.Add('<!DOCTYPE html><html><head>');
+    FAIResponseHTML.Add('<meta charset="UTF-8">');
+    FAIResponseHTML.Add('<style>');
+    FAIResponseHTML.Add('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }');
+    FAIResponseHTML.Add('.user-msg { margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px; }');
+    FAIResponseHTML.Add('.ai-msg { margin: 10px 0; padding: 5px; background-color: #f5f5f5; border-radius: 5px; }');
+    FAIResponseHTML.Add('</style>');
+    FAIResponseHTML.Add('</head><body>');
+    FIsReceivingAI := True;
+  end;
+  
+  // 追加 AI 回复内容
+  FAIResponseHTML.Add(AText);
+  
+  // 更新显示
+  HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
+  // 滚动到底部 - 使用一个较大的值确保滚到底
+  HtmlViewer1.ScrollBy(0, 10000);
 end;
 
 function TForm1.LoadConfig: TStringList;
@@ -71,7 +104,8 @@ end;
 
 procedure TForm1.OnSSEStart(Sender: TObject);
 begin
-  FAIResponseLine := Memo1.Lines.Add('AI: ');
+  // 开始接收 AI 回复
+  FIsReceivingAI := False;
   Button1.Enabled := False; // Disable Button1 when SSE starts
 end;
 
@@ -79,24 +113,27 @@ procedure TForm1.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean
 begin
   if AText <> '' then
   begin
-    if FAIResponseLine >= 0 then
-      Memo1.Lines[FAIResponseLine] := Memo1.Lines[FAIResponseLine] + AText
-    else
-      Memo1.Lines.Add(AText);
-    Memo1.SelStart := Length(Memo1.Text);
-    Memo1.Perform(EM_SCROLLCARET, 0, 0);
+    // 直接将文本添加到 HTML（后续可以支持 Markdown）
+    AppendToHTML(AText);
   end;
+  
   if IsDone then
   begin
-    Memo1.Lines.Add('');
-    FAIResponseLine := -1;
+    // 结束 AI 回复，关闭 HTML 标签
+    if FIsReceivingAI then
+    begin
+      FAIResponseHTML.Add('</body></html>');
+      HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
+      FIsReceivingAI := False;
+    end;
     Button1.Enabled := True; // Enable Button1 when SSE is done
   end;
 end;
 
 procedure TForm1.OnSSEError(Sender: TObject; const AError: string);
 begin
-  AppendToMemo('Error: ' + AError);
+  AppendToHTML('Error: ' + AError);
+  FIsReceivingAI := False;
   Button1.Enabled := True; // Enable Button1 on error
 end;
 
@@ -111,7 +148,14 @@ begin
   if Trim(Edit1.Text) = '' then Exit;
 
   Prompt := Edit1.Text;
-  AppendToMemo('me: ' + Prompt);
+  
+  // 添加用户消息到 HTML
+  if not FIsReceivingAI then
+  begin
+    FAIResponseHTML.Add('<div class="user-msg"><strong>me:</strong> ' + EscapeHTML(Prompt) + '</div>');
+    HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
+  end;
+  
   Edit1.Clear;
 
   Config := LoadConfig;
@@ -128,13 +172,13 @@ begin
 
       if Trim(URL) = '' then
       begin
-        AppendToMemo('Error: URL 未配置');
+        AppendToHTML('Error: URL 未配置');
         Exit;
       end;
 
       if Trim(Token) = '' then
       begin
-        AppendToMemo('Error: Token 未配置');
+        AppendToHTML('Error: Token 未配置');
         Exit;
       end;
 
@@ -146,16 +190,15 @@ begin
 
       if FGeminiAPI.IsBusy then
       begin
-        AppendToMemo('Error: 正在等待上一个请求仍在进行中');
+        AppendToHTML('Error: 正在等待上一个请求仍在进行中');
         Exit;
       end;
 
-      FAIResponseLine := -1;
       FGeminiAPI.SendPrompt(Prompt);
     end
     else
     begin
-      AppendToMemo('Error: 配置未正确加载');
+      AppendToHTML('Error: 配置未正确加载');
     end;
   finally
     Config.Free;
@@ -176,14 +219,27 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  Memo1.Clear;
-  FAIResponseLine := -1;
+  FAIResponseHTML := TStringList.Create;
+  FIsReceivingAI := False;
   FGeminiAPI := nil;
+  
+  // 初始化 HTML 文档
+  FAIResponseHTML.Add('<!DOCTYPE html><html><head>');
+  FAIResponseHTML.Add('<meta charset="UTF-8">');
+  FAIResponseHTML.Add('<style>');
+  FAIResponseHTML.Add('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }');
+  FAIResponseHTML.Add('.user-msg { margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px; }');
+  FAIResponseHTML.Add('.ai-msg { margin: 10px 0; padding: 5px; background-color: #f5f5f5; border-radius: 5px; }');
+  FAIResponseHTML.Add('</style>');
+  FAIResponseHTML.Add('</head><body>');
+  FAIResponseHTML.Add('</body></html>');
+  HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   FGeminiAPI.Free;
+  FAIResponseHTML.Free;
 end;
 
 end.
