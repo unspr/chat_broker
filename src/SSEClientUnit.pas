@@ -5,7 +5,7 @@ unit SSEClientUnit;
 interface
 
 uses
-  Classes, SysUtils, fphttpclient, fpjson, jsonparser, opensslsockets, LazLogger;
+  Classes, SysUtils, httpsend, ssl_openssl;
 
 type
 
@@ -24,6 +24,8 @@ type
     FURL: string;
     FHeaders: TStringList;
     FRequestBody: string;
+    FProxyHost: string;
+    FProxyPort: Word;
     FOnEvent: TOnSSEEvent;
     FOnOpen: TOnSSEOpen;
     FOnClose: TOnSSEClose;
@@ -38,7 +40,7 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(const AURL: string; AHeaders: TStringList; const ARequestBody: string);
+    constructor Create(const AURL: string; AHeaders: TStringList; const ARequestBody: string; const AProxyHost: string; const AProxyPort: Word);
     destructor Destroy; override;
     property OnEvent: TOnSSEEvent read FOnEvent write FOnEvent;
     property OnOpen: TOnSSEOpen read FOnOpen write FOnOpen;
@@ -60,7 +62,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Connect(const AURL: string; AHeaders: TStringList; const ARequestBody: string);
+    procedure Connect(const AURL: string; AHeaders: TStringList; const ARequestBody: string; const AProxyHost: string; const AProxyPort: Word);
     procedure Disconnect;
     function IsActive: Boolean;
     property OnEvent: TOnSSEEvent read FOnEvent write FOnEvent;
@@ -73,7 +75,7 @@ implementation
 
 { TSSEClientThread }
 
-constructor TSSEClientThread.Create(const AURL: string; AHeaders: TStringList; const ARequestBody: string);
+constructor TSSEClientThread.Create(const AURL: string; AHeaders: TStringList; const ARequestBody: string; const AProxyHost: string; const AProxyPort: Word);
 begin
   inherited Create(True);
   FURL := AURL;
@@ -81,8 +83,10 @@ begin
   FHeaders := TStringList.Create;
   if Assigned(AHeaders) then
     FHeaders.Assign(AHeaders);
+  FProxyHost := AProxyHost;
+  FProxyPort := AProxyPort;
   FreeOnTerminate := True;
-  FillChar(FCurrentEvent, SizeOf(FCurrentEvent), 0); // Initialize FCurrentEvent
+  FillChar(FCurrentEvent, SizeOf(FCurrentEvent), 0);
 end;
 
 destructor TSSEClientThread.Destroy;
@@ -122,7 +126,6 @@ var
   Value: string;
   // CurrentEvent: TSSEEvent;  // Removed local variable
 begin
-  DebugLn('SSE Line: ' + ALine);
   if Trim(ALine) = '' then // End of an event
   begin
     if (FCurrentEvent.Data <> '') or (FCurrentEvent.EventType <> '') then
@@ -152,7 +155,7 @@ end;
 
 procedure TSSEClientThread.Execute;
 var
-  HttpClient: TFPHTTPClient;
+  HttpClient: THTTPSend;
   ResponseStream: TMemoryStream;
   Buffer: array[0..4095] of Byte;
   BytesRead: Integer;
@@ -160,24 +163,35 @@ var
   I: Integer;
   Ch: Char;
 begin
-  HttpClient := TFPHTTPClient.Create(nil);
+  HttpClient := THTTPSend.Create;
+  HttpClient.ProxyHost := FProxyHost;
+  HttpClient.ProxyPort := IntToStr(FProxyPort);
+  HttpClient.Timeout := 10000;
+  HttpClient.KeepAlive := True;
   ResponseStream := TMemoryStream.Create;
   try
-    HttpClient.RequestHeaders.Clear;
-    HttpClient.RequestHeaders.Add('Accept: text/event-stream');
+    HttpClient.Headers.Add('Accept: text/event-stream');
     if Assigned(FHeaders) then
-      HttpClient.RequestHeaders.AddStrings(FHeaders);
+    begin
+      for I := 0 to FHeaders.Count - 1 do
+        HttpClient.Headers.Add(FHeaders[I]);
+    end;
 
     Synchronize(@DoOpen);
 
     try
       if FRequestBody = '' then
-        HttpClient.Get(FURL, ResponseStream)
+        HttpClient.HTTPMethod('GET', FURL)
       else
-        HttpClient.FormPost(FURL, FRequestBody, ResponseStream); // Fixed: Changed to FormPost
+      begin
+        HttpClient.Document.Clear;
+        HttpClient.Document.Write(PByte(FRequestBody)^, Length(FRequestBody));
+        HttpClient.MimeType := 'application/json';
+        HttpClient.HTTPMethod('POST', FURL);
+      end;
 
+      ResponseStream.CopyFrom(HttpClient.Document, 0);
       ResponseStream.Position := 0;
-      FillChar(Buffer, SizeOf(Buffer), 0); // Initialize Buffer to suppress hint
 
       LineBuffer := '';
       while not Terminated and (ResponseStream.Position < ResponseStream.Size) do
@@ -235,7 +249,7 @@ begin
   FThread := nil;
 end;
 
-procedure TSSEClient.Connect(const AURL: string; AHeaders: TStringList; const ARequestBody: string);
+procedure TSSEClient.Connect(const AURL: string; AHeaders: TStringList; const ARequestBody: string; const AProxyHost: string; const AProxyPort: Word);
 begin
   if IsActive then
     Exit;
@@ -244,7 +258,7 @@ begin
   FRequestBody := ARequestBody;
   FHeaders.Assign(AHeaders);
 
-  FThread := TSSEClientThread.Create(FURL, FHeaders, FRequestBody);
+  FThread := TSSEClientThread.Create(FURL, FHeaders, FRequestBody, AProxyHost, AProxyPort);
   FThread.OnOpen := FOnOpen;
   FThread.OnClose := FOnClose;
   FThread.OnEvent := FOnEvent;

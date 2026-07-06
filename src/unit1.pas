@@ -62,6 +62,8 @@ begin
   try
     Result.Add(Ini.ReadString('AIConfig', 'URL', ''));
     Result.Add(Ini.ReadString('AIConfig', 'Token', ''));
+    Result.Add(Ini.ReadString('Proxy', 'Host', ''));
+    Result.Add(Ini.ReadString('Proxy', 'Port', '0'));
   finally
     Ini.Free;
   end;
@@ -70,6 +72,7 @@ end;
 procedure TForm1.OnSSEStart(Sender: TObject);
 begin
   FAIResponseLine := Memo1.Lines.Add('AI: ');
+  Button1.Enabled := False; // Disable Button1 when SSE starts
 end;
 
 procedure TForm1.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
@@ -87,12 +90,14 @@ begin
   begin
     Memo1.Lines.Add('');
     FAIResponseLine := -1;
+    Button1.Enabled := True; // Enable Button1 when SSE is done
   end;
 end;
 
 procedure TForm1.OnSSEError(Sender: TObject; const AError: string);
 begin
   AppendToMemo('Error: ' + AError);
+  Button1.Enabled := True; // Enable Button1 on error
 end;
 
 procedure TForm1.Button1Click(Sender: TObject);
@@ -100,6 +105,8 @@ var
   Config: TStringList;
   URL, Token: string;
   Prompt: string;
+  ProxyHost: string;
+  ProxyPort: Word;
 begin
   if Trim(Edit1.Text) = '' then Exit;
 
@@ -113,6 +120,11 @@ begin
     begin
       URL := Config[0];
       Token := Config[1];
+      ProxyHost := Config[2];
+      if Config[3] <> '' then
+      begin
+         ProxyPort := StrToInt(Config[3]);
+      end;
 
       if Trim(URL) = '' then
       begin
@@ -127,7 +139,7 @@ begin
       end;
 
       FGeminiAPI.Free;
-      FGeminiAPI := TGeminiAPI.Create(URL, Token);
+      FGeminiAPI := TGeminiAPI.Create(URL, Token, ProxyHost, ProxyPort);
       FGeminiAPI.OnStart := @OnSSEStart;
       FGeminiAPI.OnData := @OnSSEData;
       FGeminiAPI.OnError := @OnSSEError;

@@ -19,6 +19,8 @@ type
     FURL: string;
     FToken: string;
     FPrompt: string;
+    FProxyHost: string;
+    FProxyPort: Word;
     FSSEClient: TSSEClient;
     FOnStart: TOnSSEStartEvent;
     FOnData: TOnSSEDataEvent;
@@ -37,7 +39,7 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(const AURL, AToken, APrompt: string);
+    constructor Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word);
     destructor Destroy; override; // Added destructor
     property OnStart: TOnSSEStartEvent read FOnStart write FOnStart;
     property OnData: TOnSSEDataEvent read FOnData write FOnData;
@@ -51,12 +53,14 @@ type
     FURL: string;
     FToken: string;
     FThread: TGeminiSSEThread;
+    FProxyHost: string;
+    FProxyPort: Word;
     FOnStart: TOnSSEStartEvent;
     FOnData: TOnSSEDataEvent;
     FOnError: TOnSSEErrorEvent;
     procedure OnThreadTerminated(Sender: TObject);
   public
-    constructor Create(const AURL, AToken: string);
+    constructor Create(const AURL, AToken: string; const AProxyHost: string; const AProxyPort: Word);
     destructor Destroy; override;
     procedure SendPrompt(const APrompt: string);
     function IsBusy: Boolean;
@@ -69,12 +73,14 @@ implementation
 
 { TGeminiSSEThread }
 
-constructor TGeminiSSEThread.Create(const AURL, AToken, APrompt: string);
+constructor TGeminiSSEThread.Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word);
 begin
   inherited Create(True);
   FURL := AURL;
   FToken := AToken;
   FPrompt := APrompt;
+  FProxyHost := AProxyHost;
+  FProxyPort := AProxyPort;
   FreeOnTerminate := True;
 
   FSSEClient := TSSEClient.Create;
@@ -216,7 +222,7 @@ begin
     Headers.Add('Content-Type: application/json');
     Headers.Add('X-goog-api-key: ' + FToken);
 
-    FSSEClient.Connect(FURL, Headers, RequestJSON);
+    FSSEClient.Connect(FURL, Headers, RequestJSON, FProxyHost, FProxyPort);
 
     // Wait for the SSEClient to finish or for the thread to be terminated externally
     while not Terminated and FSSEClient.IsActive do
@@ -231,11 +237,13 @@ end;
 
 { TGeminiAPI }
 
-constructor TGeminiAPI.Create(const AURL, AToken: string);
+constructor TGeminiAPI.Create(const AURL, AToken: string; const AProxyHost: string; const AProxyPort: Word);
 begin
   inherited Create;
   FURL := AURL;
   FToken := AToken;
+  FProxyHost := AProxyHost;
+  FProxyPort := AProxyPort;
   FThread := nil;
 end;
 
@@ -265,7 +273,7 @@ begin
     FThread.Free; // Free previous thread if not running
     FThread := nil;
   end;
-  FThread := TGeminiSSEThread.Create(FURL, FToken, APrompt);
+  FThread := TGeminiSSEThread.Create(FURL, FToken, APrompt, FProxyHost, FProxyPort);
   FThread.OnStart := FOnStart;
   FThread.OnData := FOnData;
   FThread.OnError := FOnError;
