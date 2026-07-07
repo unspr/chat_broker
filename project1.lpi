@@ -26,6 +26,9 @@
     </RunParams>
     <RequiredPackages>
       <Item>
+        <PackageName Value="fpc_markdown"/>
+      </Item>
+      <Item>
         <PackageName Value="FrameViewer09"/>
       </Item>
       <Item>

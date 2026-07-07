@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, Unit2,
-  Unit3, IniFiles, HtmlView, ExtCtrls;
+  Unit3, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils;
 
 type
 
@@ -22,6 +22,7 @@ type
     procedure FormDestroy(Sender: TObject);
   private
     FGeminiAPI: TGeminiAPI;
+    md : TMarkdownProcessor;
     FMessageContainer: TScrollBox;  // 消息容器 ScrollBox
     FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
     FAIContentBuffer: TStringList;   // AI 回复内容缓冲区
@@ -100,21 +101,13 @@ begin
   Result.Height := 60;
   Result.ComponentIndex := FMessageContainer.ControlCount - 1;
 
-  // 初始化 HTML 文档
   FAIContentBuffer.Clear;
-  FAIContentBuffer.Add('<!DOCTYPE html><html><head>');
-  FAIContentBuffer.Add('<meta charset="UTF-8">');
-  FAIContentBuffer.Add('<style>' + GetCSSStyles + '</style>');
-  FAIContentBuffer.Add('</head><body>');
-  FAIContentBuffer.Add('<div class="ai-msg"><strong>AI:</strong> ');
-  
+
   // 滚动到底部
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
 procedure TForm1.AppendToAIViewer(const AText: string);
-var
-  HTML: string;
 begin
   if not Assigned(FCurrentAIViewer) then Exit;
   
@@ -122,8 +115,7 @@ begin
   FAIContentBuffer.Add(AText);
   
   // 临时关闭标签以更新显示
-  HTML := FAIContentBuffer.Text + '</div></body></html>';
-  FCurrentAIViewer.LoadFromString(HTML);
+  FCurrentAIViewer.LoadFromString(md.process(UTF8String(FAIContentBuffer.Text)));
   
   // 移除临时添加的结束标签
   FAIContentBuffer.Delete(FAIContentBuffer.Count - 1);
@@ -162,17 +154,14 @@ procedure TForm1.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean
 begin
   if AText <> '' then
   begin
-    // 直接将文本添加到当前 AI Viewer
     AppendToAIViewer(AText);
   end;
   
   if IsDone then
   begin
-    // 结束 AI 回复，完成 HTML 文档
     if FIsReceivingAI and Assigned(FCurrentAIViewer) then
     begin
-      FAIContentBuffer.Add('</div></body></html>');
-      FCurrentAIViewer.LoadFromString(FAIContentBuffer.Text);
+      AppendToAIViewer(AText);
       FIsReceivingAI := False;
       FCurrentAIViewer := nil;
     end;
@@ -278,6 +267,7 @@ begin
   FCurrentAIViewer := nil;
   FMessageCount := 0;
   FGeminiAPI := nil;
+  md := TMarkdownProcessor.createDialect(mdDaringFireball);
   
   // 创建消息容器 ScrollBox（带滚动条）
   FMessageContainer := TScrollBox.Create(Self);
@@ -294,6 +284,7 @@ procedure TForm1.FormDestroy(Sender: TObject);
 begin
   FGeminiAPI.Free;
   FAIContentBuffer.Free;
+  md.free;
   // FMessageContainer 会自动释放其子控件
 end;
 
