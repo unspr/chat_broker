@@ -10,14 +10,6 @@ object Form1: TForm1
   LCLVersion = '4.6.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  object HtmlViewer1: THtmlViewer
-    Left = 48
-    Height = 464
-    Top = 32
-    Width = 632
-    ScrollBars = ssVertical
-    TabOrder = 2
-  end
   object Edit1: TEdit
     Left = 128
     Height = 25
@@ -30,7 +22,7 @@ object Form1: TForm1
     Height = 27
     Top = 544
     Width = 75
-    Caption = 'Click Me'
+    Caption = '发送'
     TabOrder = 1
     OnClick = Button1Click
   end

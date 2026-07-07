@@ -6,14 +6,13 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, Unit2,
-  Unit3, IniFiles, HtmlView;
+  Unit3, IniFiles, HtmlView, ExtCtrls;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
-    HtmlViewer1: THtmlViewer;
     Edit1: TEdit;
     Button1: TButton;
     Button2: TButton;
@@ -23,9 +22,14 @@ type
     procedure FormDestroy(Sender: TObject);
   private
     FGeminiAPI: TGeminiAPI;
-    FAIResponseHTML: TStringList;
+    FMessageContainer: TScrollBox;  // 消息容器 ScrollBox
+    FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
+    FAIContentBuffer: TStringList;   // AI 回复内容缓冲区
     FIsReceivingAI: Boolean;
-    procedure AppendToHTML(const AText: string);
+    FMessageCount: Integer;          // 消息计数器
+    procedure CreateUserMessage(const AText: string);
+    function CreateAIViewer: THtmlViewer;
+    procedure AppendToAIViewer(const AText: string);
     function LoadConfig: TStringList;
     procedure OnSSEStart(Sender: TObject);
     procedure OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
@@ -53,35 +57,79 @@ begin
   Result := StringReplace(Result, '''', '&#39;', [rfReplaceAll]);
 end;
 
-procedure TForm1.AppendToHTML(const AText: string);
-var
-  UserMessage, AIMessage: string;
+function GetCSSStyles: string;
 begin
-  // 将文本转换为简单的 HTML 格式
-  UserMessage := '<div style="margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px;">' + 
-                 '<strong>me:</strong> ' + EscapeHTML(AText) + '</div>';
+  Result := 
+    'body { font-family: Arial, sans-serif; margin: 0; padding: 8px; }' + sLineBreak +
+    '.user-msg { margin: 5px 0; padding: 8px; background-color: #e3f2fd; border-radius: 5px; }' + sLineBreak +
+    '.ai-msg { margin: 5px 0; padding: 8px; background-color: #f5f5f5; border-radius: 5px; }';
+end;
+
+procedure TForm1.CreateUserMessage(const AText: string);
+var
+  Viewer: THtmlViewer;
+  HTML: string;
+begin
+  // 创建 HtmlViewer
+  Viewer := THtmlViewer.Create(FMessageContainer);
+  Viewer.Parent := FMessageContainer;
+  Viewer.Align := alTop;
+  Viewer.Height := 60;
+  Viewer.ComponentIndex := FMessageContainer.ControlCount - 1;
+
+  // 生成用户消息 HTML
+  HTML := '<!DOCTYPE html><html><head>' +
+          '<meta charset="UTF-8">' +
+          '<style>' + GetCSSStyles + '</style>' +
+          '</head><body>' +
+          '<div class="user-msg"><strong>me:</strong> ' + EscapeHTML(AText) + '</div>' +
+          '</body></html>';
   
-  if not FIsReceivingAI then
-  begin
-    FAIResponseHTML.Clear;
-    FAIResponseHTML.Add('<!DOCTYPE html><html><head>');
-    FAIResponseHTML.Add('<meta charset="UTF-8">');
-    FAIResponseHTML.Add('<style>');
-    FAIResponseHTML.Add('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }');
-    FAIResponseHTML.Add('.user-msg { margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px; }');
-    FAIResponseHTML.Add('.ai-msg { margin: 10px 0; padding: 5px; background-color: #f5f5f5; border-radius: 5px; }');
-    FAIResponseHTML.Add('</style>');
-    FAIResponseHTML.Add('</head><body>');
-    FIsReceivingAI := True;
-  end;
+  Viewer.LoadFromString(HTML);
   
-  // 追加 AI 回复内容
-  FAIResponseHTML.Add(AText);
+  // 滚动到底部
+  FMessageContainer.ScrollBy(0, FMessageContainer.Height);
+end;
+
+function TForm1.CreateAIViewer: THtmlViewer;
+begin
+  // 创建 HtmlViewer
+  Result := THtmlViewer.Create(FMessageContainer);
+  Result.Parent := FMessageContainer;
+  Result.Align := alTop;
+  Result.Height := 60;
+  Result.ComponentIndex := FMessageContainer.ControlCount - 1;
+
+  // 初始化 HTML 文档
+  FAIContentBuffer.Clear;
+  FAIContentBuffer.Add('<!DOCTYPE html><html><head>');
+  FAIContentBuffer.Add('<meta charset="UTF-8">');
+  FAIContentBuffer.Add('<style>' + GetCSSStyles + '</style>');
+  FAIContentBuffer.Add('</head><body>');
+  FAIContentBuffer.Add('<div class="ai-msg"><strong>AI:</strong> ');
   
-  // 更新显示
-  HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
-  // 滚动到底部 - 使用一个较大的值确保滚到底
-  HtmlViewer1.ScrollBy(0, 10000);
+  // 滚动到底部
+  FMessageContainer.ScrollBy(0, FMessageContainer.Height);
+end;
+
+procedure TForm1.AppendToAIViewer(const AText: string);
+var
+  HTML: string;
+begin
+  if not Assigned(FCurrentAIViewer) then Exit;
+  
+  // 追加内容到缓冲区
+  FAIContentBuffer.Add(AText);
+  
+  // 临时关闭标签以更新显示
+  HTML := FAIContentBuffer.Text + '</div></body></html>';
+  FCurrentAIViewer.LoadFromString(HTML);
+  
+  // 移除临时添加的结束标签
+  FAIContentBuffer.Delete(FAIContentBuffer.Count - 1);
+  
+  // 滚动到底部
+  FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
 function TForm1.LoadConfig: TStringList;
@@ -104,8 +152,9 @@ end;
 
 procedure TForm1.OnSSEStart(Sender: TObject);
 begin
-  // 开始接收 AI 回复
-  FIsReceivingAI := False;
+  // 开始接收 AI 回复，创建新的 AI Viewer
+  FCurrentAIViewer := CreateAIViewer;
+  FIsReceivingAI := True;
   Button1.Enabled := False; // Disable Button1 when SSE starts
 end;
 
@@ -113,18 +162,19 @@ procedure TForm1.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean
 begin
   if AText <> '' then
   begin
-    // 直接将文本添加到 HTML（后续可以支持 Markdown）
-    AppendToHTML(AText);
+    // 直接将文本添加到当前 AI Viewer
+    AppendToAIViewer(AText);
   end;
   
   if IsDone then
   begin
-    // 结束 AI 回复，关闭 HTML 标签
-    if FIsReceivingAI then
+    // 结束 AI 回复，完成 HTML 文档
+    if FIsReceivingAI and Assigned(FCurrentAIViewer) then
     begin
-      FAIResponseHTML.Add('</body></html>');
-      HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
+      FAIContentBuffer.Add('</div></body></html>');
+      FCurrentAIViewer.LoadFromString(FAIContentBuffer.Text);
       FIsReceivingAI := False;
+      FCurrentAIViewer := nil;
     end;
     Button1.Enabled := True; // Enable Button1 when SSE is done
   end;
@@ -132,8 +182,12 @@ end;
 
 procedure TForm1.OnSSEError(Sender: TObject; const AError: string);
 begin
-  AppendToHTML('Error: ' + AError);
-  FIsReceivingAI := False;
+  if FIsReceivingAI then
+  begin
+    AppendToAIViewer('Error: ' + AError);
+    FIsReceivingAI := False;
+    FCurrentAIViewer := nil;
+  end;
   Button1.Enabled := True; // Enable Button1 on error
 end;
 
@@ -149,12 +203,8 @@ begin
 
   Prompt := Edit1.Text;
   
-  // 添加用户消息到 HTML
-  if not FIsReceivingAI then
-  begin
-    FAIResponseHTML.Add('<div class="user-msg"><strong>me:</strong> ' + EscapeHTML(Prompt) + '</div>');
-    HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
-  end;
+  // 添加用户消息
+  CreateUserMessage(Prompt);
   
   Edit1.Clear;
 
@@ -172,13 +222,15 @@ begin
 
       if Trim(URL) = '' then
       begin
-        AppendToHTML('Error: URL 未配置');
+        if Assigned(FCurrentAIViewer) then
+          AppendToAIViewer('Error: URL 未配置');
         Exit;
       end;
 
       if Trim(Token) = '' then
       begin
-        AppendToHTML('Error: Token 未配置');
+        if Assigned(FCurrentAIViewer) then
+          AppendToAIViewer('Error: Token 未配置');
         Exit;
       end;
 
@@ -190,7 +242,8 @@ begin
 
       if FGeminiAPI.IsBusy then
       begin
-        AppendToHTML('Error: 正在等待上一个请求仍在进行中');
+        if Assigned(FCurrentAIViewer) then
+          AppendToAIViewer('Error: 正在等待上一个请求仍在进行中');
         Exit;
       end;
 
@@ -198,7 +251,8 @@ begin
     end
     else
     begin
-      AppendToHTML('Error: 配置未正确加载');
+      if Assigned(FCurrentAIViewer) then
+        AppendToAIViewer('Error: 配置未正确加载');
     end;
   finally
     Config.Free;
@@ -219,27 +273,28 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  FAIResponseHTML := TStringList.Create;
+  FAIContentBuffer := TStringList.Create;
   FIsReceivingAI := False;
+  FCurrentAIViewer := nil;
+  FMessageCount := 0;
   FGeminiAPI := nil;
   
-  // 初始化 HTML 文档
-  FAIResponseHTML.Add('<!DOCTYPE html><html><head>');
-  FAIResponseHTML.Add('<meta charset="UTF-8">');
-  FAIResponseHTML.Add('<style>');
-  FAIResponseHTML.Add('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }');
-  FAIResponseHTML.Add('.user-msg { margin: 10px 0; padding: 5px; background-color: #e3f2fd; border-radius: 5px; }');
-  FAIResponseHTML.Add('.ai-msg { margin: 10px 0; padding: 5px; background-color: #f5f5f5; border-radius: 5px; }');
-  FAIResponseHTML.Add('</style>');
-  FAIResponseHTML.Add('</head><body>');
-  FAIResponseHTML.Add('</body></html>');
-  HtmlViewer1.LoadFromString(FAIResponseHTML.Text);
+  // 创建消息容器 ScrollBox（带滚动条）
+  FMessageContainer := TScrollBox.Create(Self);
+  FMessageContainer.Parent := Self;
+  FMessageContainer.Left := 0;
+  FMessageContainer.Top := 0;
+  FMessageContainer.Width := ClientWidth;
+  FMessageContainer.Height := ClientHeight - 80;  // 留出底部80像素给输入框和按钮
+  FMessageContainer.AutoScroll := True;
+  FMessageContainer.VertScrollBar.Tracking := True;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   FGeminiAPI.Free;
-  FAIResponseHTML.Free;
+  FAIContentBuffer.Free;
+  // FMessageContainer 会自动释放其子控件
 end;
 
 end.
