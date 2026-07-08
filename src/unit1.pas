@@ -6,24 +6,26 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, Unit2,
-  Unit3, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils;
+  Unit3, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls;
 
 type
 
-  { TForm1 }
+  { TMainForm }
 
-  TForm1 = class(TForm)
+  TMainForm = class(TForm)
     Edit1: TEdit;
-    Button1: TButton;
-    Button2: TButton;
-    procedure Button1Click(Sender: TObject);
-    procedure Button2Click(Sender: TObject);
+    SendBtn: TButton;
+    ConfigBtn: TButton;
+    FMessageContainer: TFlowPanel;
+    ScrollBox: TScrollBox;
+    procedure SendBtnClick(Sender: TObject);
+    procedure ConfigBtnClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure HtmlViewer1KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     FGeminiAPI: TGeminiAPI;
     md : TMarkdownProcessor;
-    FMessageContainer: TScrollBox;  // 消息容器 ScrollBox
     FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
     FAIContentBuffer: TStringList;   // AI 回复内容缓冲区
     FIsReceivingAI: Boolean;
@@ -41,13 +43,13 @@ type
 const
   EM_SCROLLCARET = $00B7;
 var
-  Form1: TForm1;
+  MainForm: TMainForm;
 
 implementation
 
 {$R *.lfm}
 
-{ TForm1 }
+{ TMainForm }
 
 function EscapeHTML(const AText: string): string;
 begin
@@ -66,7 +68,7 @@ begin
     '.ai-msg { margin: 5px 0; padding: 8px; background-color: #f5f5f5; border-radius: 5px; }';
 end;
 
-procedure TForm1.CreateUserMessage(const AText: string);
+procedure TMainForm.CreateUserMessage(const AText: string);
 var
   Viewer: THtmlViewer;
   HTML: string;
@@ -74,9 +76,9 @@ begin
   // 创建 HtmlViewer
   Viewer := THtmlViewer.Create(FMessageContainer);
   Viewer.Parent := FMessageContainer;
-  Viewer.Align := alTop;
+  Viewer.Width := FMessageContainer.ClientWidth;
   Viewer.Height := 60;
-  Viewer.ComponentIndex := FMessageContainer.ControlCount - 1;
+  Viewer.OnKeyDown := @HtmlViewer1KeyDown;
 
   // 生成用户消息 HTML
   HTML := '<!DOCTYPE html><html><head>' +
@@ -92,39 +94,42 @@ begin
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
-function TForm1.CreateAIViewer: THtmlViewer;
+function TMainForm.CreateAIViewer: THtmlViewer;
 begin
   // 创建 HtmlViewer
   Result := THtmlViewer.Create(FMessageContainer);
   Result.Parent := FMessageContainer;
-  Result.Align := alTop;
+  Result.Width := FMessageContainer.ClientWidth;
   Result.Height := 60;
-  Result.ComponentIndex := FMessageContainer.ControlCount - 1;
+  Result.OnKeyDown := @HtmlViewer1KeyDown;
 
   FAIContentBuffer.Clear;
+  FAIContentBuffer.Add('AI: ');
 
   // 滚动到底部
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
-procedure TForm1.AppendToAIViewer(const AText: string);
+procedure TMainForm.AppendToAIViewer(const AText: string);
+var
+  content: string;
 begin
   if not Assigned(FCurrentAIViewer) then Exit;
   
   // 追加内容到缓冲区
   FAIContentBuffer.Add(AText);
-  
-  // 临时关闭标签以更新显示
-  FCurrentAIViewer.LoadFromString(md.process(UTF8String(FAIContentBuffer.Text)));
-  
-  // 移除临时添加的结束标签
-  FAIContentBuffer.Delete(FAIContentBuffer.Count - 1);
-  
+  content := UTF8String(FAIContentBuffer.Text);
+  FCurrentAIViewer.LoadFromString(md.process(content));
+  if content.Length > 300 then
+  begin
+    FCurrentAIViewer.Height := 400;
+  end;
+
   // 滚动到底部
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
-function TForm1.LoadConfig: TStringList;
+function TMainForm.LoadConfig: TStringList;
 var
   Ini: TIniFile;
   IniFileName: string;
@@ -142,15 +147,15 @@ begin
   end;
 end;
 
-procedure TForm1.OnSSEStart(Sender: TObject);
+procedure TMainForm.OnSSEStart(Sender: TObject);
 begin
   // 开始接收 AI 回复，创建新的 AI Viewer
   FCurrentAIViewer := CreateAIViewer;
   FIsReceivingAI := True;
-  Button1.Enabled := False; // Disable Button1 when SSE starts
+  SendBtn.Enabled := False; // Disable SendBtn when SSE starts
 end;
 
-procedure TForm1.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
+procedure TMainForm.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
 begin
   if AText <> '' then
   begin
@@ -161,15 +166,15 @@ begin
   begin
     if FIsReceivingAI and Assigned(FCurrentAIViewer) then
     begin
-      AppendToAIViewer(AText);
       FIsReceivingAI := False;
+      FCurrentAIViewer.SendToBack;
       FCurrentAIViewer := nil;
     end;
-    Button1.Enabled := True; // Enable Button1 when SSE is done
+    SendBtn.Enabled := True; // Enable SendBtn when SSE is done
   end;
 end;
 
-procedure TForm1.OnSSEError(Sender: TObject; const AError: string);
+procedure TMainForm.OnSSEError(Sender: TObject; const AError: string);
 begin
   if FIsReceivingAI then
   begin
@@ -177,10 +182,10 @@ begin
     FIsReceivingAI := False;
     FCurrentAIViewer := nil;
   end;
-  Button1.Enabled := True; // Enable Button1 on error
+  SendBtn.Enabled := True; // Enable SendBtn on error
 end;
 
-procedure TForm1.Button1Click(Sender: TObject);
+procedure TMainForm.SendBtnClick(Sender: TObject);
 var
   Config: TStringList;
   URL, Token: string;
@@ -248,19 +253,19 @@ begin
   end;
 end;
 
-procedure TForm1.Button2Click(Sender: TObject);
+procedure TMainForm.ConfigBtnClick(Sender: TObject);
 begin
-  if Form2 = nil then
-    Form2 := TForm2.Create(Application);
+  if CfgForm= nil then
+    CfgForm := TCfgForm.Create(Application);
   try
-    Form2.ShowModal;
+    CfgForm.ShowModal;
   finally
-    Form2.Free;
-    Form2 := nil;
+    CfgForm.Free;
+    CfgForm := nil;
   end;
 end;
 
-procedure TForm1.FormCreate(Sender: TObject);
+procedure TMainForm.FormCreate(Sender: TObject);
 begin
   FAIContentBuffer := TStringList.Create;
   FIsReceivingAI := False;
@@ -268,19 +273,9 @@ begin
   FMessageCount := 0;
   FGeminiAPI := nil;
   md := TMarkdownProcessor.createDialect(mdDaringFireball);
-  
-  // 创建消息容器 ScrollBox（带滚动条）
-  FMessageContainer := TScrollBox.Create(Self);
-  FMessageContainer.Parent := Self;
-  FMessageContainer.Left := 0;
-  FMessageContainer.Top := 0;
-  FMessageContainer.Width := ClientWidth;
-  FMessageContainer.Height := ClientHeight - 80;  // 留出底部80像素给输入框和按钮
-  FMessageContainer.AutoScroll := True;
-  FMessageContainer.VertScrollBar.Tracking := True;
 end;
 
-procedure TForm1.FormDestroy(Sender: TObject);
+procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FGeminiAPI.Free;
   FAIContentBuffer.Free;
@@ -288,5 +283,22 @@ begin
   // FMessageContainer 会自动释放其子控件
 end;
 
+procedure TMainForm.HtmlViewer1KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  CurrentViewer:  THtmlViewer;
+begin
+  if (Sender is THtmlViewer) then
+    begin
+      // 2. 检查是否按下了 Ctrl + C
+      if (Key = Ord('C')) and (ssCtrl in Shift) then
+      begin
+        // 3. 安全转换类型
+        CurrentViewer := THtmlViewer(Sender);
+        CurrentViewer.CopyToClipboard;
+
+        Key := 0; // 消耗事件，防止向上传递
+      end;
+    end;
+end;
 end.
 

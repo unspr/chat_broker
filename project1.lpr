@@ -21,8 +21,8 @@ begin
   Application.MainFormOnTaskbar:=True;
   {$POP}
   Application.Initialize;
-  Application.CreateForm(TForm1, Form1);
-  Application.CreateForm(TForm2, Form2);
+  Application.CreateForm(TMainForm, MainForm);
+  Application.CreateForm(TCfgForm, CfgForm);
   Application.Run;
 end.
 

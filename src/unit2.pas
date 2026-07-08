@@ -10,9 +10,9 @@ uses
 
 type
 
-  { TForm2 }
+  { TCfgForm }
 
-  TForm2 = class(TForm)
+  TCfgForm = class(TForm)
     SaveProxy: TButton;
     EditProxyHost: TEdit;
     EditProxyPort: TEdit;
@@ -24,8 +24,8 @@ type
     Label3: TLabel;
     Label4: TLabel;
     PageControl1: TPageControl;
-    TabSheet1: TTabSheet;
-    TabSheet2: TTabSheet;
+    GeminiConfigTab: TTabSheet;
+    ProxyConfigTab: TTabSheet;
     procedure SaveProxyClick(Sender: TObject);
     procedure ButtonSaveClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
@@ -38,25 +38,25 @@ type
   end;
 
 var
-  Form2: TForm2;
+  CfgForm: TCfgForm;
   IniFileName: string;
 
 implementation
 
 {$R *.lfm}
 
-{ TForm2 }
+{ TCfgForm }
 
-procedure TForm2.FormCreate(Sender: TObject);
+procedure TCfgForm.FormCreate(Sender: TObject);
 begin
 end;
 
-procedure TForm2.FormShow(Sender: TObject);
+procedure TCfgForm.FormShow(Sender: TObject);
 begin
   LoadConfig;
 end;
 
-procedure TForm2.LoadConfig;
+procedure TCfgForm.LoadConfig;
 var
   Ini: TIniFile;
 begin
@@ -73,7 +73,7 @@ begin
   end;
 end;
 
-procedure TForm2.SaveConfig;
+procedure TCfgForm.SaveConfig;
 var
   Ini: TIniFile;
 begin
@@ -88,13 +88,13 @@ begin
   end;
 end;
 
-procedure TForm2.ButtonSaveClick(Sender: TObject);
+procedure TCfgForm.ButtonSaveClick(Sender: TObject);
 begin
   SaveConfig;
   ModalResult := mrOk;
 end;
 
-procedure TForm2.SaveProxyClick(Sender: TObject);
+procedure TCfgForm.SaveProxyClick(Sender: TObject);
 var
   Ini: TIniFile;
 begin
