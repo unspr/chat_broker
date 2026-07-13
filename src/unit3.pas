@@ -10,9 +10,11 @@ uses
 type
 
   { TGeminiSSEThread }
+
   TOnSSEStartEvent = procedure(Sender: TObject) of object;
   TOnSSEDataEvent = procedure(Sender: TObject; const AText: string; IsDone: Boolean) of object;
   TOnSSEErrorEvent = procedure(Sender: TObject; const AError: string) of object;
+  TOnInteractionIdReceived = procedure(Sender: TObject; const AInteractionId: string) of object;
 
   TGeminiSSEThread = class(TThread)
   private
@@ -21,16 +23,19 @@ type
     FPrompt: string;
     FProxyHost: string;
     FProxyPort: Word;
+    FPreviousInteractionId: string; // New: for conversation continuation
     FSSEClient: TSSEClient;
     FOnStart: TOnSSEStartEvent;
     FOnData: TOnSSEDataEvent;
     FOnError: TOnSSEErrorEvent;
+    FOnInteractionIdReceived: TOnInteractionIdReceived; // Callback for interaction ID
     AErrorMsg: string;
     FSyncedText: string; // New: for Synchronize parameter passing
     FSyncedDone: Boolean; // New: for Synchronize parameter passing
     procedure DoStart;
     procedure DoData(const AText: string; IsDone: Boolean);
     procedure DoError;
+    procedure DoInteractionId; // Callback for interaction ID (no params for Synchronize)
     procedure DoDataSync; // New: Parameterless method for Synchronize
     procedure SSEClientEvent(Sender: TObject; const AEvent: TSSEEvent);
     procedure SSEClientOpen(Sender: TObject);
@@ -39,11 +44,12 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word);
+    constructor Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word; const APreviousInteractionId: string = '');
     destructor Destroy; override; // Added destructor
     property OnStart: TOnSSEStartEvent read FOnStart write FOnStart;
     property OnData: TOnSSEDataEvent read FOnData write FOnData;
     property OnError: TOnSSEErrorEvent read FOnError write FOnError;
+    property OnInteractionIdReceived: TOnInteractionIdReceived read FOnInteractionIdReceived write FOnInteractionIdReceived;
   end;
 
   { TGeminiAPI }
@@ -55,10 +61,12 @@ type
     FThread: TGeminiSSEThread;
     FProxyHost: string;
     FProxyPort: Word;
+    FPreviousInteractionId: string; // Stores the interaction ID for conversation continuation
     FOnStart: TOnSSEStartEvent;
     FOnData: TOnSSEDataEvent;
     FOnError: TOnSSEErrorEvent;
     procedure OnThreadTerminated(Sender: TObject);
+    procedure OnInteractionIdReceived(Sender: TObject; const AInteractionId: string);
   public
     constructor Create(const AURL, AToken: string; const AProxyHost: string; const AProxyPort: Word);
     destructor Destroy; override;
@@ -73,7 +81,7 @@ implementation
 
 { TGeminiSSEThread }
 
-constructor TGeminiSSEThread.Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word);
+constructor TGeminiSSEThread.Create(const AURL, AToken, APrompt: string; const AProxyHost: string; const AProxyPort: Word; const APreviousInteractionId: string = '');
 begin
   inherited Create(True);
   FURL := AURL;
@@ -81,6 +89,7 @@ begin
   FPrompt := APrompt;
   FProxyHost := AProxyHost;
   FProxyPort := AProxyPort;
+  FPreviousInteractionId := APreviousInteractionId;
   FreeOnTerminate := True;
 
   FSSEClient := TSSEClient.Create;
@@ -114,6 +123,12 @@ begin
     FOnError(Self, AErrorMsg);
 end;
 
+procedure TGeminiSSEThread.DoInteractionId;
+begin
+  if Assigned(FOnInteractionIdReceived) then
+    FOnInteractionIdReceived(Self, FPreviousInteractionId);
+end;
+
 procedure TGeminiSSEThread.DoDataSync;
 begin
   DoData(FSyncedText, FSyncedDone);
@@ -143,6 +158,8 @@ var
   DeltaObj: TJSONObject;
   Text: string;
   Done: Boolean;
+  InteractionIdObj: TJSONObject;
+  InteractionId: string;
 begin
   DebugLn('SSEClientEvent - Type: ' + AEvent.EventType + ', Data: ' + AEvent.Data);
   if AEvent.Data = '' then Exit;
@@ -178,11 +195,33 @@ begin
           else if EventType = 'interaction.completed' then
           begin
             Done := True;
+            // Extract and save interaction ID for next request
+            InteractionIdObj := nil;
+            if JSONObj.Find('interaction') is TJSONObject then
+            begin
+              InteractionIdObj := TJSONObject(JSONObj.Find('interaction'));
+              try
+                InteractionId := InteractionIdObj.Get('id', '');
+                if InteractionId <> '' then
+                begin
+                  DebugLn('Extracted interaction ID: ' + InteractionId);
+                  // Save to thread field first
+                  FPreviousInteractionId := InteractionId;
+                  // Notify via callback using Synchronize
+                  Synchronize(@DoInteractionId);
+                end;
+              except
+                on E: Exception do
+                  DebugLn('Error extracting interaction ID: ' + E.Message);
+              end;
+            end;
           end;
 
           if (Text <> '') or Done then
           begin
-            FSyncedText := Text;
+            // Only set FSyncedText for text content, not for done signal
+            if Text <> '' then
+              FSyncedText := Text;
             FSyncedDone := Done;
             Synchronize(@DoDataSync);
           end;
@@ -211,9 +250,14 @@ begin
   try
     RequestBody := TJSONObject.Create;
     try
-      RequestBody.Add('model', 'gemini-3.5-flash');
+      RequestBody.Add('model', 'gemini-3.1-flash-lite');
       RequestBody.Add('input', FPrompt);
       RequestBody.Add('stream', True);
+      
+      // Add previous_interaction_id if available
+      if FPreviousInteractionId <> '' then
+        RequestBody.Add('previous_interaction_id', FPreviousInteractionId);
+      
       RequestJSON := RequestBody.AsJSON;
     finally
       RequestBody.Free;
@@ -264,19 +308,30 @@ begin
   FThread := nil;
 end;
 
+procedure TGeminiAPI.OnInteractionIdReceived(Sender: TObject; const AInteractionId: string);
+begin
+  FPreviousInteractionId := AInteractionId;
+  DebugLn('Stored interaction ID for next request: ' + FPreviousInteractionId);
+end;
+
 procedure TGeminiAPI.SendPrompt(const APrompt: string);
 begin
   if Assigned(FThread) then
   begin
-    //if FThread.Running then // This will be changed to not FThread.Terminated
-    //  Exit; // Still busy with previous request
-    FThread.Free; // Free previous thread if not running
+    // 等待前一个线程完成
+    if not FThread.Terminated then
+    begin
+      FThread.Terminate;
+      FThread.WaitFor;
+    end;
+    FThread.Free; // Free previous thread after waiting
     FThread := nil;
   end;
-  FThread := TGeminiSSEThread.Create(FURL, FToken, APrompt, FProxyHost, FProxyPort);
+  FThread := TGeminiSSEThread.Create(FURL, FToken, APrompt, FProxyHost, FProxyPort, FPreviousInteractionId);
   FThread.OnStart := FOnStart;
   FThread.OnData := FOnData;
   FThread.OnError := FOnError;
+  FThread.OnInteractionIdReceived := @OnInteractionIdReceived;
   FThread.OnTerminate := @OnThreadTerminated;
   FThread.Start;
 end;

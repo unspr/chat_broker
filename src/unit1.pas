@@ -13,6 +13,7 @@ type
   { TMainForm }
 
   TMainForm = class(TForm)
+    NewConversation: TButton;
     Edit1: TEdit;
     SendBtn: TButton;
     ConfigBtn: TButton;
@@ -23,6 +24,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure HtmlViewer1KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure NewConversationClick(Sender: TObject);
   private
     FGeminiAPI: TGeminiAPI;
     md : TMarkdownProcessor;
@@ -167,7 +169,6 @@ begin
     if FIsReceivingAI and Assigned(FCurrentAIViewer) then
     begin
       FIsReceivingAI := False;
-      FCurrentAIViewer.SendToBack;
       FCurrentAIViewer := nil;
     end;
     SendBtn.Enabled := True; // Enable SendBtn when SSE is done
@@ -228,11 +229,14 @@ begin
         Exit;
       end;
 
-      FGeminiAPI.Free;
-      FGeminiAPI := TGeminiAPI.Create(URL, Token, ProxyHost, ProxyPort);
-      FGeminiAPI.OnStart := @OnSSEStart;
-      FGeminiAPI.OnData := @OnSSEData;
-      FGeminiAPI.OnError := @OnSSEError;
+      // 只在第一次或配置变化时创建/重建 TGeminiAPI 实例
+      if not Assigned(FGeminiAPI) then
+      begin
+        FGeminiAPI := TGeminiAPI.Create(URL, Token, ProxyHost, ProxyPort);
+        FGeminiAPI.OnStart := @OnSSEStart;
+        FGeminiAPI.OnData := @OnSSEData;
+        FGeminiAPI.OnError := @OnSSEError;
+      end;
 
       if FGeminiAPI.IsBusy then
       begin
@@ -299,6 +303,30 @@ begin
         Key := 0; // 消耗事件，防止向上传递
       end;
     end;
+end;
+
+procedure TMainForm.NewConversationClick(Sender: TObject);
+var
+  i: Integer;
+begin
+  // 清空所有聊天记录（删除 FMessageContainer 中的所有子控件）
+  for i := FMessageContainer.ControlCount - 1 downto 0 do
+  begin
+    FMessageContainer.Controls[i].Free;
+  end;
+
+  // Free 掉 FGeminiAPI
+  if Assigned(FGeminiAPI) then
+  begin
+    FGeminiAPI.Free;
+    FGeminiAPI := nil;
+  end;
+
+  // 重置相关状态
+  FCurrentAIViewer := nil;
+  FAIContentBuffer.Clear;
+  FIsReceivingAI := False;
+  FMessageCount := 0;
 end;
 end.
 
