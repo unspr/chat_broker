@@ -1,3 +1,12 @@
 [submodule "external/fpc-markdown"]
 	path = external/fpc-markdown
 	url = git@github.com:mriscoc/fpc-markdown.git
+	ignore = dirty
+[submodule "external/html_viewer"]
+	path = external/html_viewer
+	url = git@github.com:BerndGabriel/HtmlViewer.git
+	ignore = dirty
+[submodule "external/synapse"]
+	path = external/synapse
+	url = git@github.com:geby/synapse.git
+	ignore = dirty

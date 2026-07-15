@@ -5,7 +5,7 @@ unit SSEClientUnit;
 interface
 
 uses
-  Classes, SysUtils, httpsend, ssl_openssl;
+  Classes, SysUtils, httpsend, ssl_openssl3;
 
 type
 
