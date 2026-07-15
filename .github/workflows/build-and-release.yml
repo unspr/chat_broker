@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Lazarus environment
+        uses: gcarreno/setup-lazarus@v3.4.1
+
+      - name: Install Dependency
+        run: rake install
+      - name: Build Project
+        run: lazbuild --build-mode=Release project1.lpi
+          
+      - name: Verify Build Output
+        run: |
+          if (-Not (Test-Path "bin\chat_broker.exe")) {
+            Write-Error "Build failed: chat_broker.exe not found in bin directory"
+            exit 1
+          }
+          Write-Host "Build successful!"
+          Get-ChildItem bin\
+          
+      - name: Create Release Archive
+        run: |
+          # Create a zip file with all files from bin directory
+          Compress-Archive -Path "bin\*" -DestinationPath "chat_broker.zip" -Force
+          Write-Host "Archive created successfully"
+          
+      - name: Generate Version Tag
+        id: version
+        run: |
+          $date = Get-Date -Format "yyyyMMdd"
+          $runNumber = "${{ github.run_number }}"
+          $tag = "v${date}.${runNumber}"
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          echo "Generated tag: $tag"
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          files: chat_broker.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

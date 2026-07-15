@@ -10,5 +10,8 @@ end
 
 task :dependency do
   sh "git submodule update --init --recursive"
+  sh "lazbuild --add-package-link external/html_viewer/package/FrameViewer09.lpk"
+  sh "lazbuild --add-package-link external/synapse/laz_synapse.lpk"
+  sh "lazbuild --add-package-link external/fpc-markdown/fpc_markdown.lpk"
 end
 task :install => ["bin/libssl-1_1-x64.dll", "bin/libcrypto-1_1-x64.dll", :dependency]
