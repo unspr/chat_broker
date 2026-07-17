@@ -1,12 +1,12 @@
-unit Unit1;
+unit main;
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, Unit2,
-  Unit3, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, config,
+  gemini, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls;
 
 type
 
