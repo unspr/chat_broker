@@ -276,7 +276,7 @@ begin
   FCurrentAIViewer := nil;
   FMessageCount := 0;
   FGeminiAPI := nil;
-  md := TMarkdownProcessor.createDialect(mdDaringFireball);
+  md := TMarkdownProcessor.createDialect(mdCommonMark);
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);

@@ -135,6 +135,7 @@ begin
     RequestBody := TJSONObject.Create;
     try
       RequestBody.Add('model', 'gemini-3.1-flash-lite');
+      RequestBody.Add('system_instruction', 'Please answer me using mdCommonMark');
       RequestBody.Add('input', APrompt);
       RequestBody.Add('stream', True);
 
