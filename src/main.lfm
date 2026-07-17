@@ -1,56 +1,57 @@
 object MainForm: TMainForm
   Left = 807
-  Height = 620
+  Height = 1085
   Top = 314
-  Width = 707
-  Caption = 'MainForm'
-  ClientHeight = 620
-  ClientWidth = 707
-  Font.Height = -12
+  Width = 1237
+  Caption = 'Chat Broker'
+  ClientHeight = 1085
+  ClientWidth = 1237
+  DesignTimePPI = 168
+  Font.Height = -21
   LCLVersion = '4.6.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object Edit1: TEdit
-    Left = 88
-    Height = 25
-    Top = 562
-    Width = 360
+    Left = 154
+    Height = 36
+    Top = 984
+    Width = 630
     TabOrder = 0
   end
   object SendBtn: TButton
-    Left = 464
-    Height = 27
-    Top = 562
-    Width = 75
-    Caption = '发送'
+    Left = 812
+    Height = 47
+    Top = 984
+    Width = 131
+    Caption = 'Send'
     TabOrder = 1
     OnClick = SendBtnClick
   end
   object ConfigBtn: TButton
-    Left = 544
-    Height = 27
-    Top = 562
-    Width = 75
-    Caption = '配置'
+    Left = 952
+    Height = 47
+    Top = 984
+    Width = 131
+    Caption = 'Config'
     ModalResult = 1
     TabOrder = 2
     OnClick = ConfigBtnClick
   end
   object ScrollBox: TScrollBox
-    Left = 9
-    Height = 541
+    Left = 16
+    Height = 947
     Top = 0
-    Width = 690
+    Width = 1208
     HorzScrollBar.Page = 1
     VertScrollBar.Page = 1
-    ClientHeight = 537
-    ClientWidth = 686
+    ClientHeight = 943
+    ClientWidth = 1204
     TabOrder = 3
     object FMessageContainer: TFlowPanel
       Left = 0
-      Height = 537
+      Height = 943
       Top = 0
-      Width = 686
+      Width = 1204
       Align = alClient
       ControlList = <>
       FlowLayout = tlTop
@@ -59,11 +60,11 @@ object MainForm: TMainForm
     end
   end
   object NewConversation: TButton
-    Left = 624
-    Height = 25
-    Top = 562
-    Width = 75
-    Caption = '新对话'
+    Left = 1092
+    Height = 44
+    Top = 984
+    Width = 131
+    Caption = 'New'
     TabOrder = 4
     OnClick = NewConversationClick
   end

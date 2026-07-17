@@ -3,7 +3,7 @@ object CfgForm: TCfgForm
   Height = 621
   Top = 538
   Width = 833
-  Caption = '配置'
+  Caption = 'Config'
   ClientHeight = 621
   ClientWidth = 833
   DesignTimePPI = 168
@@ -55,7 +55,7 @@ object CfgForm: TCfgForm
         Height = 44
         Top = 383
         Width = 131
-        Caption = '保存'
+        Caption = 'Save'
         TabOrder = 2
         OnClick = ButtonSaveClick
       end
@@ -99,7 +99,7 @@ object CfgForm: TCfgForm
         Height = 44
         Top = 392
         Width = 131
-        Caption = '保存'
+        Caption = 'Save'
         TabOrder = 2
         OnClick = SaveProxyClick
       end
