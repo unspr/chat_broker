@@ -5,7 +5,7 @@ unit SSEClientUnit;
 interface
 
 uses
-  Classes, SysUtils, httpsend, ssl_openssl3;
+  Classes, SysUtils, httpsend, ssl_openssl3, LazLogger;
 
 type
 
@@ -63,7 +63,6 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Connect(const AURL: string; AHeaders: TStringList; const ARequestBody: string; const AProxyHost: string; const AProxyPort: Word);
-    procedure Disconnect;
     function IsActive: Boolean;
     property OnEvent: TOnSSEEvent read FOnEvent write FOnEvent;
     property OnOpen: TOnSSEOpen read FOnOpen write FOnOpen;
@@ -213,6 +212,7 @@ begin
       if (LineBuffer <> '') and not Terminated then
         ProcessSSELine(LineBuffer);
 
+    DebugLn('AI response end');
     except
       on E: Exception do
       begin
@@ -238,14 +238,12 @@ end;
 
 destructor TSSEClient.Destroy;
 begin
-  Disconnect;
   FHeaders.Free;
   inherited Destroy;
 end;
 
 procedure TSSEClient.OnThreadTerminated(Sender: TObject);
 begin
-  FThread.Free;
   FThread := nil;
 end;
 
@@ -253,6 +251,11 @@ procedure TSSEClient.Connect(const AURL: string; AHeaders: TStringList; const AR
 begin
   if IsActive then
     Exit;
+
+  if Assigned(FThread) then
+  begin
+      FThread.WaitFor;
+  end;
 
   FURL := AURL;
   FRequestBody := ARequestBody;
@@ -265,15 +268,6 @@ begin
   FThread.OnError := FOnError;
   FThread.OnTerminate := @OnThreadTerminated;
   FThread.Start;
-end;
-
-procedure TSSEClient.Disconnect;
-begin
-  if Assigned(FThread) then
-  begin
-    FThread.Terminate;
-    FThread.WaitFor;
-  end;
 end;
 
 function TSSEClient.IsActive: Boolean;
