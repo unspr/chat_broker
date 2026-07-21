@@ -6,7 +6,8 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, config,
-  gemini, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls;
+  gemini, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls,
+  LCLType;
 
 type
 
@@ -14,7 +15,7 @@ type
 
   TMainForm = class(TForm)
     NewConversation: TButton;
-    Edit1: TEdit;
+    ChatContent: TMemo;
     SendBtn: TButton;
     ConfigBtn: TButton;
     FMessageContainer: TFlowPanel;
@@ -24,6 +25,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure HtmlViewer1KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ChatContentKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure NewConversationClick(Sender: TObject);
   private
     FGeminiAPI: TGeminiAPI;
@@ -194,14 +196,14 @@ var
   ProxyHost: string;
   ProxyPort: Word;
 begin
-  if Trim(Edit1.Text) = '' then Exit;
+  if Trim(ChatContent.Text) = '' then Exit;
 
-  Prompt := Edit1.Text;
+  Prompt := ChatContent.Text;
   
   // 添加用户消息
   CreateUserMessage(Prompt);
   
-  Edit1.Clear;
+  ChatContent.Clear;
 
   Config := LoadConfig;
   try
@@ -303,6 +305,16 @@ begin
         Key := 0; // 消耗事件，防止向上传递
       end;
     end;
+end;
+
+procedure TMainForm.ChatContentKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  // Enter 发送消息，Shift+Enter 换行
+  if (Key = VK_RETURN) and not (ssShift in Shift) then
+  begin
+    Key := 0; // 阻止默认换行行为
+    SendBtnClick(Sender);
+  end;
 end;
 
 procedure TMainForm.NewConversationClick(Sender: TObject);

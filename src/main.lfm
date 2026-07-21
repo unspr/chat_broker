@@ -11,12 +11,17 @@ object MainForm: TMainForm
   LCLVersion = '4.6.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  object Edit1: TEdit
-    Left = 154
-    Height = 36
-    Top = 984
-    Width = 630
+  object ChatContent: TMemo
+    Left = 114
+    Height = 72
+    Top = 976
+    Width = 686
+    BorderStyle = bsNone
+    Lines.Strings = (
+      ''
+    )
     TabOrder = 0
+    OnKeyDown = ChatContentKeyDown
   end
   object SendBtn: TButton
     Left = 812
