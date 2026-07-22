@@ -18,8 +18,10 @@ type
     EditProxyPort: TEdit;
     EditURL: TEdit;
     EditToken: TEdit;
+    EditModel: TEdit;
     Label1: TLabel;
     Label2: TLabel;
+    Label5: TLabel;
     ButtonSave: TButton;
     Label3: TLabel;
     Label4: TLabel;
@@ -66,6 +68,7 @@ begin
   try
     EditURL.Text := Ini.ReadString('AIConfig', 'URL', '');
     EditToken.Text := Ini.ReadString('AIConfig', 'Token', '');
+    EditModel.Text := Ini.ReadString('AIConfig', 'Model', 'gemini-3.1-flash-lite');
     EditProxyHost.Text := Ini.ReadString('Proxy', 'Host', '');
     EditProxyPort.Text := Ini.ReadString('Proxy', 'Port', '');
   finally
@@ -83,6 +86,7 @@ begin
   try
     Ini.WriteString('AIConfig', 'URL', EditURL.Text);
     Ini.WriteString('AIConfig', 'Token', EditToken.Text);
+    Ini.WriteString('AIConfig', 'Model', EditModel.Text);
   finally
     Ini.Free;
   end;

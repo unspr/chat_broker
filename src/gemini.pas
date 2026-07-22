@@ -20,6 +20,7 @@ type
     FSSEClient: TSSEClient;
     FURL: string;
     FToken: string;
+    FModel: string;
     FProxyHost: string;
     FProxyPort: Word;
     FPreviousInteractionId: string; // Stores the interaction ID for conversation continuation
@@ -29,7 +30,7 @@ type
     procedure OnInteractionIdReceived(Sender: TObject; const AInteractionId: string);
     procedure SSEClientEvent(Sender: TObject; const AEvent: TSSEEvent);
   public
-    constructor Create(const AURL, AToken: string; const AProxyHost: string; const AProxyPort: Word);
+    constructor Create(const AURL, AToken, AModel: string; const AProxyHost: string; const AProxyPort: Word);
     destructor Destroy; override;
     procedure SendPrompt(const APrompt: string);
     function IsBusy: Boolean;
@@ -134,7 +135,7 @@ begin
   try
     RequestBody := TJSONObject.Create;
     try
-      RequestBody.Add('model', 'gemini-3.1-flash-lite');
+      RequestBody.Add('model', FModel);
       RequestBody.Add('system_instruction', 'Please answer me using mdCommonMark');
       RequestBody.Add('input', APrompt);
       RequestBody.Add('stream', True);
@@ -157,11 +158,12 @@ begin
   end;
 end;
 
-constructor TGeminiAPI.Create(const AURL, AToken: string; const AProxyHost: string; const AProxyPort: Word);
+constructor TGeminiAPI.Create(const AURL, AToken, AModel: string; const AProxyHost: string; const AProxyPort: Word);
 begin
   inherited Create;
   FURL := AURL;
   FToken := AToken;
+  FModel := AModel;
   FProxyHost := AProxyHost;
   FProxyPort := AProxyPort;
   FSSEClient := TSSEClient.Create;

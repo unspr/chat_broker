@@ -144,6 +144,7 @@ begin
   try
     Result.Add(Ini.ReadString('AIConfig', 'URL', ''));
     Result.Add(Ini.ReadString('AIConfig', 'Token', ''));
+    Result.Add(Ini.ReadString('AIConfig', 'Model', 'gemini-3.1-flash-lite'));
     Result.Add(Ini.ReadString('Proxy', 'Host', ''));
     Result.Add(Ini.ReadString('Proxy', 'Port', '0'));
   finally
@@ -191,7 +192,7 @@ end;
 procedure TMainForm.SendBtnClick(Sender: TObject);
 var
   Config: TStringList;
-  URL, Token: string;
+  URL, Token, Model: string;
   Prompt: string;
   ProxyHost: string;
   ProxyPort: Word;
@@ -211,10 +212,11 @@ begin
     begin
       URL := Config[0];
       Token := Config[1];
-      ProxyHost := Config[2];
-      if Config[3] <> '' then
+      Model := Config[2];
+      ProxyHost := Config[3];
+      if Config[4] <> '' then
       begin
-         ProxyPort := StrToInt(Config[3]);
+         ProxyPort := StrToInt(Config[4]);
       end;
 
       if Trim(URL) = '' then
@@ -234,7 +236,7 @@ begin
       // 只在第一次或配置变化时创建/重建 TGeminiAPI 实例
       if not Assigned(FGeminiAPI) then
       begin
-        FGeminiAPI := TGeminiAPI.Create(URL, Token, ProxyHost, ProxyPort);
+        FGeminiAPI := TGeminiAPI.Create(URL, Token, Model, ProxyHost, ProxyPort);
         FGeminiAPI.OnStart := @OnSSEStart;
         FGeminiAPI.OnData := @OnSSEData;
         FGeminiAPI.OnError := @OnSSEError;
