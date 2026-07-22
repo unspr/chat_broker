@@ -3,6 +3,8 @@ object CfgForm: TCfgForm
   Height = 621
   Top = 538
   Width = 833
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsSingle
   Caption = 'Config'
   ClientHeight = 621
   ClientWidth = 833
@@ -36,6 +38,13 @@ object CfgForm: TCfgForm
         Width = 66
         Caption = 'Token:'
       end
+      object Label5: TLabel
+        Left = 102
+        Height = 28
+        Top = 308
+        Width = 70
+        Caption = 'Model:'
+      end
       object EditURL: TEdit
         Left = 271
         Height = 36
@@ -50,13 +59,20 @@ object CfgForm: TCfgForm
         Width = 450
         TabOrder = 1
       end
+      object EditModel: TEdit
+        Left = 271
+        Height = 36
+        Top = 300
+        Width = 450
+        TabOrder = 2
+      end
       object ButtonSave: TButton
         Left = 350
         Height = 44
-        Top = 383
+        Top = 450
         Width = 131
         Caption = 'Save'
-        TabOrder = 2
+        TabOrder = 3
         OnClick = ButtonSaveClick
       end
     end

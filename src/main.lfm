@@ -3,6 +3,7 @@ object MainForm: TMainForm
   Height = 1085
   Top = 314
   Width = 1237
+  BorderIcons = [biSystemMenu, biMinimize]
   Caption = 'Chat Broker'
   ClientHeight = 1085
   ClientWidth = 1237
@@ -16,6 +17,7 @@ object MainForm: TMainForm
     Height = 72
     Top = 976
     Width = 686
+    Anchors = [akLeft, akRight, akBottom]
     BorderStyle = bsNone
     Lines.Strings = (
       ''
@@ -28,6 +30,7 @@ object MainForm: TMainForm
     Height = 47
     Top = 984
     Width = 131
+    Anchors = [akRight, akBottom]
     Caption = 'Send'
     TabOrder = 1
     OnClick = SendBtnClick
@@ -37,6 +40,7 @@ object MainForm: TMainForm
     Height = 47
     Top = 984
     Width = 131
+    Anchors = [akRight, akBottom]
     Caption = 'Config'
     ModalResult = 1
     TabOrder = 2
@@ -49,6 +53,7 @@ object MainForm: TMainForm
     Width = 1208
     HorzScrollBar.Page = 1
     VertScrollBar.Page = 1
+    Anchors = [akTop, akLeft, akRight, akBottom]
     ClientHeight = 943
     ClientWidth = 1204
     TabOrder = 3
@@ -69,6 +74,7 @@ object MainForm: TMainForm
     Height = 44
     Top = 984
     Width = 131
+    Anchors = [akRight, akBottom]
     Caption = 'New'
     TabOrder = 4
     OnClick = NewConversationClick
