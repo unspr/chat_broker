@@ -28,8 +28,8 @@ jobs:
           
       - name: Verify Build Output
         run: |
-          if (-Not (Test-Path "bin\chat_broker.exe")) {
-            Write-Error "Build failed: chat_broker.exe not found in bin directory"
+          if (-Not (Test-Path "bin\ChatBroker.exe")) {
+            Write-Error "Build failed: ChatBroker.exe not found in bin directory"
             exit 1
           }
           Write-Host "Build successful!"
