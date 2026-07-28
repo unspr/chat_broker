@@ -31,7 +31,7 @@ type
     FGeminiAPI: TGeminiAPI;
     md : TMarkdownProcessor;
     FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
-    FAIContentBuffer: TStringList;   // AI 回复内容缓冲区
+    FAIContentBuffer: string;        // AI 回复内容缓冲区
     FIsReceivingAI: Boolean;
     FMessageCount: Integer;          // 消息计数器
     procedure CreateUserMessage(const AText: string);
@@ -107,24 +107,19 @@ begin
   Result.Height := 60;
   Result.OnKeyDown := @HtmlViewer1KeyDown;
 
-  FAIContentBuffer.Clear;
-  FAIContentBuffer.Add('AI: ');
+  FAIContentBuffer := 'AI: ';
 
   // 滚动到底部
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
 end;
 
 procedure TMainForm.AppendToAIViewer(const AText: string);
-var
-  content: string;
 begin
   if not Assigned(FCurrentAIViewer) then Exit;
   
-  // 追加内容到缓冲区
-  FAIContentBuffer.Add(AText);
-  content := UTF8String(FAIContentBuffer.Text);
-  FCurrentAIViewer.LoadFromString(md.process(content));
-  if content.Length > 300 then
+  FAIContentBuffer := FAIContentBuffer + AText;
+  FCurrentAIViewer.LoadFromString(md.process(FAIContentBuffer));
+  if FAIContentBuffer.Length > 300 then
   begin
     FCurrentAIViewer.Height := 400;
   end;
@@ -275,7 +270,7 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  FAIContentBuffer := TStringList.Create;
+  FAIContentBuffer := '';
   FIsReceivingAI := False;
   FCurrentAIViewer := nil;
   FMessageCount := 0;
@@ -286,7 +281,6 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FGeminiAPI.Free;
-  FAIContentBuffer.Free;
   md.free;
   // FMessageContainer 会自动释放其子控件
 end;
@@ -338,7 +332,7 @@ begin
 
   // 重置相关状态
   FCurrentAIViewer := nil;
-  FAIContentBuffer.Clear;
+  FAIContentBuffer := '';
   FIsReceivingAI := False;
   FMessageCount := 0;
 end;
