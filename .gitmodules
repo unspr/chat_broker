@@ -6,7 +6,3 @@
 	path = external/html_viewer
 	url = git@github.com:BerndGabriel/HtmlViewer.git
 	ignore = dirty
-[submodule "external/synapse"]
-	path = external/synapse
-	url = git@github.com:geby/synapse.git
-	ignore = dirty

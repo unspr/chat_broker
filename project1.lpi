@@ -66,9 +66,6 @@
         <PackageName Value="FrameViewer09"/>
       </Item>
       <Item>
-        <PackageName Value="laz_synapse"/>
-      </Item>
-      <Item>
         <PackageName Value="LCL"/>
       </Item>
     </RequiredPackages>
@@ -90,10 +87,6 @@
         <ComponentName Value="CfgForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-      </Unit>
-      <Unit>
-        <Filename Value="src\gemini.pas"/>
-        <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="src\SSEClientUnit.pas"/>

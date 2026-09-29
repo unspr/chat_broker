@@ -10,7 +10,7 @@ uses
   athreads,
   {$ENDIF}
   Interfaces, // this includes the LCL widgetset
-  Forms, main, config, gemini, SSEClientUnit, FrameViewer09;
+  Forms, main, config, SSEClientUnit, FrameViewer09;
 
 {$R *.res}
 
