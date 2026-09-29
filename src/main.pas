@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, Menus, config,
-  gemini, IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls,
+  IniFiles, HtmlView, ExtCtrls, MarkdownProcessor, MarkdownUtils, ComCtrls, SSEClientUnit,
   LCLType;
 
 type
@@ -28,7 +28,7 @@ type
     procedure ChatContentKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure NewConversationClick(Sender: TObject);
   private
-    FGeminiAPI: TGeminiAPI;
+    FSSEClient: TSSEClient;
     md : TMarkdownProcessor;
     FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
     FAIContentBuffer: string;        // AI 回复内容缓冲区
@@ -39,7 +39,7 @@ type
     procedure AppendToAIViewer(const AText: string);
     function LoadConfig: TStringList;
     procedure OnSSEStart(Sender: TObject);
-    procedure OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
+    procedure OnSSEData(Sender: TObject; const AEvent: TSSEEvent);
     procedure OnSSEError(Sender: TObject; const AError: string);
   public
 
@@ -155,22 +155,21 @@ begin
   SendBtn.Enabled := False; // Disable SendBtn when SSE starts
 end;
 
-procedure TMainForm.OnSSEData(Sender: TObject; const AText: string; IsDone: Boolean);
+procedure TMainForm.OnSSEData(Sender: TObject; const AEvent: TSSEEvent);
 begin
-  if AText <> '' then
+  if AEvent.Data <> '' then // Use AEvent.Data
   begin
-    AppendToAIViewer(AText);
+    AppendToAIViewer(AEvent.Data); // Pass AEvent.Data
   end;
-  
-  if IsDone then
+
+  // Since OnSSEData is now called once with the complete response
+  // (socket closure signifies end), the 'done' logic should always execute here.
+  if FIsReceivingAI and Assigned(FCurrentAIViewer) then
   begin
-    if FIsReceivingAI and Assigned(FCurrentAIViewer) then
-    begin
-      FIsReceivingAI := False;
-      FCurrentAIViewer := nil;
-    end;
-    SendBtn.Enabled := True; // Enable SendBtn when SSE is done
+    FIsReceivingAI := False;
+    FCurrentAIViewer := nil;
   end;
+  SendBtn.Enabled := True; // Enable SendBtn when SSE is done
 end;
 
 procedure TMainForm.OnSSEError(Sender: TObject; const AError: string);
@@ -187,10 +186,8 @@ end;
 procedure TMainForm.SendBtnClick(Sender: TObject);
 var
   Config: TStringList;
-  URL, Token, Model: string;
+  URL, Token: string;
   Prompt: string;
-  ProxyHost: string;
-  ProxyPort: Word;
 begin
   if Trim(ChatContent.Text) = '' then Exit;
 
@@ -207,12 +204,6 @@ begin
     begin
       URL := Config[0];
       Token := Config[1];
-      Model := Config[2];
-      ProxyHost := Config[3];
-      if Config[4] <> '' then
-      begin
-         ProxyPort := StrToInt(Config[4]);
-      end;
 
       if Trim(URL) = '' then
       begin
@@ -228,23 +219,24 @@ begin
         Exit;
       end;
 
-      // 只在第一次或配置变化时创建/重建 TGeminiAPI 实例
-      if not Assigned(FGeminiAPI) then
+      if FSSEClient = nil then
       begin
-        FGeminiAPI := TGeminiAPI.Create(URL, Token, Model, ProxyHost, ProxyPort);
-        FGeminiAPI.OnStart := @OnSSEStart;
-        FGeminiAPI.OnData := @OnSSEData;
-        FGeminiAPI.OnError := @OnSSEError;
+        FSSEClient := TSSEClient.Create();
+        FSSEClient.OnOpen := @OnSSEStart;
+        FSSEClient.OnEvent := @OnSSEData;
+        FSSEClient.OnError := @OnSSEError;
       end;
-
-      if FGeminiAPI.IsBusy then
+      if FSSEClient.IsActive then
       begin
         if Assigned(FCurrentAIViewer) then
           AppendToAIViewer('Error: 正在等待上一个请求仍在进行中');
         Exit;
       end;
 
-      FGeminiAPI.SendPrompt(Prompt);
+      try
+        FSSEClient.Connect(Prompt);
+      finally
+      end;
     end
     else
     begin
@@ -274,13 +266,16 @@ begin
   FIsReceivingAI := False;
   FCurrentAIViewer := nil;
   FMessageCount := 0;
-  FGeminiAPI := nil;
+  FSSEClient := TSSEClient.Create; // Initialize FSSEClient
+  FSSEClient.OnOpen := @OnSSEStart;
+  FSSEClient.OnEvent := @OnSSEData;
+  FSSEClient.OnError := @OnSSEError;
   md := TMarkdownProcessor.createDialect(mdCommonMark);
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
-  FGeminiAPI.Free;
+  FSSEClient.Free;
   md.free;
   // FMessageContainer 会自动释放其子控件
 end;
@@ -323,11 +318,11 @@ begin
     FMessageContainer.Controls[i].Free;
   end;
 
-  // Free 掉 FGeminiAPI
-  if Assigned(FGeminiAPI) then
+  // Free 掉 FSSEClient
+  if Assigned(FSSEClient) then
   begin
-    FGeminiAPI.Free;
-    FGeminiAPI := nil;
+    FSSEClient.Free;
+    FSSEClient := nil;
   end;
 
   // 重置相关状态
