@@ -1,7 +1,7 @@
 directory "bin"
 
 file "bin/ChatRouter.exe" => "bin" do
-  sh "curl -o bin/ChatRouter.exe https://github.com/unspr/chat-router/releases/download/latest/ChatRouter.exe"
+  sh "curl -L -o bin/ChatRouter.exe https://github.com/unspr/chat-router/releases/download/latest/ChatRouter.exe"
 end
 
 task :install => ["bin/ChatRouter.exe"] do
