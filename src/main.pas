@@ -162,9 +162,7 @@ begin
     AppendToAIViewer(AEvent.Data); // Pass AEvent.Data
   end;
 
-  // Since OnSSEData is now called once with the complete response
-  // (socket closure signifies end), the 'done' logic should always execute here.
-  if FIsReceivingAI and Assigned(FCurrentAIViewer) then
+  if FIsReceivingAI and AEvent.IsEnd then
   begin
     FIsReceivingAI := False;
     FCurrentAIViewer := nil;

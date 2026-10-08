@@ -12,6 +12,7 @@ type
 
   TSSEEvent = record
     Data: string;
+    IsEnd: boolean;
   end;
 
 
@@ -89,9 +90,7 @@ end;
 
 destructor TSSEClientThread.Destroy;
 begin
-
-  if FSocketFD <> INVALID_SOCKET then
-    CloseSocket(FSocketFD);
+  CloseSocket(FSocketFD);
   inherited Destroy;
 end;
 
@@ -124,7 +123,6 @@ end;
 procedure TSSEClientThread.Execute;
 var
   SocketPath: string;
-  Addr: sockaddr; // Keep generic sockaddr for now, cast inside IFDEF
   BytesSent: Integer;
   BytesReceived: Integer;
   Buffer: array[0..4095] of Byte;
@@ -133,31 +131,19 @@ var
   Retries: Integer;
   PrevInteractionID: string;
   MessageToSend: string;
-  AppPath: string;
-  NewLen: Integer;
   FirstLineEnd: Integer;
 {$IFDEF USE_UNIX_SOCKETS}
   Addr_un: sockaddr_un;
 {$ENDIF}
 begin
   Synchronize(@DoOpen);
-  AppPath := ExtractFilePath(Application.ExeName); // Get application directory
 
   try
-
-
     // 2. Setup Unix Domain Socket
     SocketPath := GetTempDir + PathDelim + UNIX_SOCKET_PATH;
 
     DebugLn('prepare connect socket');
     FSocketFD := fpsocket(AF_UNIX, SOCK_STREAM, 0);
-    if FSocketFD = INVALID_SOCKET then
-    begin
-      AErrorMsg := 'Failed to create Unix domain socket.';
-      DebugLn(AErrorMsg);
-      Synchronize(@DoError);
-      Exit;
-    end;
 
     FillChar(Addr_un, SizeOf(Addr_un), 0);
     Addr_un.sun_family := AF_UNIX;
@@ -224,35 +210,35 @@ begin
 
     // 6. Read response
     LineBuffer := '';
+    FirstLineEnd := 0;
     while not Terminated do
     begin
       BytesReceived := fprecv(FSocketFD, @Buffer[0], SizeOf(Buffer), 0);
       if BytesReceived > 0 then
       begin
-          NewLen := Length(LineBuffer) + BytesReceived;
-          SetLength(LineBuffer, NewLen);
-          Move(Buffer[0], LineBuffer[Length(LineBuffer) - BytesReceived + 1], BytesReceived);
+        if FirstLineEnd = 0 then
+        begin
+          FirstLineEnd := IndexByte(Buffer[0], Length(Buffer), 10);
+          if FirstLineEnd <> 0 then
+          begin
+            SetString(LineBuffer, PAnsiChar(@Buffer[0]), FirstLineEnd);
+            FNewInteractionID := LineBuffer;
+            SetString(LineBuffer, PAnsiChar(@Buffer[FirstLineEnd + 1]), BytesReceived - FirstLineEnd - 1);
+          end;
+        end
+        else
+        begin
+          SetString(LineBuffer, PAnsiChar(@Buffer[0]), BytesReceived)
+        end;
+          FCurrentEvent.Data := LineBuffer;
+          Synchronize(@DoEvent);
       end
       else if BytesReceived = 0 then
       begin
         DebugLn('ChatRouter.exe closed connection. Full response received.');
-        if LineBuffer <> '' then
-        begin
-          FirstLineEnd := Pos(#10, LineBuffer);
-            if FirstLineEnd > 0 then
-            begin
-              FNewInteractionID := Trim(Copy(LineBuffer, 1, FirstLineEnd - 1));
-              FCurrentEvent.Data := Copy(LineBuffer, FirstLineEnd + 1, Length(LineBuffer) - FirstLineEnd);
-            end
-            else // No newline, treat entire buffer as data (or error if ID is expected)
-            begin
-              FNewInteractionID := ''; // Or handle as an error if ID is mandatory
-              FCurrentEvent.Data := LineBuffer;
-            end;
-
-          Synchronize(@DoEvent);
-          FillChar(FCurrentEvent, SizeOf(FCurrentEvent), 0); // Clear FCurrentEvent
-        end;
+        FCurrentEvent.Data := '';
+        FCurrentEvent.IsEnd := False;
+        Synchronize(@DoEvent);
         Break;
       end
       else
@@ -264,11 +250,8 @@ begin
     end;
 
   finally
-    if FSocketFD <> INVALID_SOCKET then
-    begin
-      CloseSocket(FSocketFD);
-      FSocketFD := TSocket(INVALID_SOCKET);
-    end; // Correctly close the 'if FSocketFD' block
+    CloseSocket(FSocketFD);
+    FSocketFD := TSocket(INVALID_SOCKET);
 
     Synchronize(@DoClose);
   end;
