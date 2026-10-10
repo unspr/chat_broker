@@ -219,7 +219,7 @@ begin
         if FirstLineEnd = 0 then
         begin
           FirstLineEnd := IndexByte(Buffer[0], Length(Buffer), 10);
-          if FirstLineEnd <> 0 then
+          if FirstLineEnd > 0 then
           begin
             SetString(LineBuffer, PAnsiChar(@Buffer[0]), FirstLineEnd);
             FNewInteractionID := LineBuffer;

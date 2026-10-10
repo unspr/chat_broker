@@ -31,7 +31,7 @@ type
     FSSEClient: TSSEClient;
     md : TMarkdownProcessor;
     FCurrentAIViewer: THtmlViewer;  // 当前正在接收 AI 回复的 HtmlViewer
-    FAIContentBuffer: string;        // AI 回复内容缓冲区
+    FAIContentBuffer: TStringList;        // AI 回复内容缓冲区
     FIsReceivingAI: Boolean;
     FMessageCount: Integer;          // 消息计数器
     procedure CreateUserMessage(const AText: string);
@@ -107,7 +107,8 @@ begin
   Result.Height := 60;
   Result.OnKeyDown := @HtmlViewer1KeyDown;
 
-  FAIContentBuffer := 'AI: ';
+  FAIContentBuffer.Clear;
+  FAIContentBuffer.Add('AI: ');
 
   // 滚动到底部
   FMessageContainer.ScrollBy(0, FMessageContainer.Height);
@@ -116,10 +117,10 @@ end;
 procedure TMainForm.AppendToAIViewer(const AText: string);
 begin
   if not Assigned(FCurrentAIViewer) then Exit;
-  
-  FAIContentBuffer := FAIContentBuffer + AText;
-  FCurrentAIViewer.LoadFromString(md.process(FAIContentBuffer));
-  if FAIContentBuffer.Length > 300 then
+
+  FAIContentBuffer.Add(AText);
+  FCurrentAIViewer.LoadFromString(md.process(FAIContentBuffer.Text));
+  if FAIContentBuffer.Count >= 8 then
   begin
     FCurrentAIViewer.Height := 400;
   end;
@@ -260,7 +261,8 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  FAIContentBuffer := '';
+  FAIContentBuffer := TStringList.Create;
+  FAIContentBuffer.LineBreak := '';
   FIsReceivingAI := False;
   FCurrentAIViewer := nil;
   FMessageCount := 0;
@@ -325,9 +327,7 @@ begin
 
   // 重置相关状态
   FCurrentAIViewer := nil;
-  FAIContentBuffer := '';
   FIsReceivingAI := False;
   FMessageCount := 0;
 end;
 end.
-
